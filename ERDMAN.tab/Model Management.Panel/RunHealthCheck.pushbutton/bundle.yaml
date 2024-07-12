@@ -1,0 +1,5 @@
+title: "Run Health\nCheck"
+tooltip: "Runs a Dynamo Script for the Health Check. 
+        \nMake sure you have the most up-to-date packages 
+        \ninstalled before running to avoid errors."
+help_url: "mailto:vdc@erdman.com"

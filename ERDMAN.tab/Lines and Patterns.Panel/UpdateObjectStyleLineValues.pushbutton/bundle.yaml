@@ -1,0 +1,5 @@
+title: "Update Obj Sty\nLine Weights"
+tooltip: "Update the object sytles according to our new standards.\n
+          Ensure this is only ran 1 time per project. If the values\n
+          need to be updated, you can edit them in the python script."
+help_url: "mailto:vdc@erdman.com"

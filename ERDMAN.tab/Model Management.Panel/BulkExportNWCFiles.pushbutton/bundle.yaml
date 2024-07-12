@@ -1,0 +1,3 @@
+title: "Batch Export\nNWC Files"
+tooltip: "Runs a python script that will export \nall 3D Views with 'NAVIS_' in the name."
+help_url: "mailto:vdc@erdman.com"
