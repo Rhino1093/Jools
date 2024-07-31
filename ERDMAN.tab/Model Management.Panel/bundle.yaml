@@ -5,3 +5,4 @@ layout:
   - Switch
   - UpgradeRVT
   - BulkExportNWCFiles
+  - ExportParameters
