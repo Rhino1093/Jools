@@ -1,0 +1,6 @@
+title: "Fill Patterns\n & Regions"
+
+layout:
+  - GenerateFilledRegionSwatches
+  - RenameFilledRegions
+  - PatternsToRegionTypes

@@ -1,5 +1,0 @@
-title: "Upgrade Multiple\nRVT Models"
-tooltip: "Runs Dynamo Script to upgrade multiple Revit models.
-          \nYou will be prompted to locate the file directory
-          \nand then select options relating to the models."
-help_url: "mailto:vdc@erdman.com"

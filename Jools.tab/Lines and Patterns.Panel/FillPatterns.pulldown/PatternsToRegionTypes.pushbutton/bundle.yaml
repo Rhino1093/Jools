@@ -1,0 +1,4 @@
+title: "Create Filled Region Types for Fill Patterns"
+tooltip: "This script will make filled regions for every hatch\n
+          pattern in the project. Must be in a drafting view."
+help_url: "mailto:vdc@erdman.com"

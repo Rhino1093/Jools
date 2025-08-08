@@ -1,0 +1,5 @@
+title: "Sync Dynamo\nPackages"
+tooltip: "Must run before running any of the other
+        \nscripts in the Jools extension. 
+        \nWorkaround for Dynamo Package Management."
+help_url: "empty"
