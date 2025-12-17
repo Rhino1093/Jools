@@ -2,18 +2,15 @@
 # -*- coding: utf-8 -*-
 
 __author__ = "Ryan Johnston"
-__date__ = "2025-12-15"
+__date__ = "2025-12-04"
 __purpose__ = "Adjusts the height of selected elements to snap to the nearest ceiling in linked models."
-import clr # type: ignore
-clr.AddReference("RevitAPI")  # type: ignore
-clr.AddReference("RevitAPIUI")  # type: ignore
 
+import clr
 import sys
 
-# Patch sys.stdout.flush if it's missing (CPython engine workaround)
-if not hasattr(sys.stdout, "flush"):
-    sys.stdout.flush = lambda: None
-
+# Standard Revit API
+clr.AddReference("RevitAPI")
+clr.AddReference("RevitAPIUI")
 from Autodesk.Revit.DB import (
     FilteredElementCollector,
     BuiltInCategory,
@@ -23,103 +20,287 @@ from Autodesk.Revit.DB import (
     XYZ,
     ElementCategoryFilter,
     ViewType,
-    StorageType
+    StorageType,
+    ElementId
 )
-from Autodesk.Revit.UI import TaskDialog
+from Autodesk.Revit.UI import TaskDialog, Selection
+from System.Collections.Generic import List
+
+# Windows Forms (for UI in CPython)
+clr.AddReference("System.Windows.Forms")
+clr.AddReference("System.Drawing")
+from System.Windows.Forms import (
+    Application, Form, Label, TextBox, Button, 
+    CheckBox, CheckedListBox, DialogResult, 
+    MessageBox, MessageBoxButtons, MessageBoxIcon,
+    FormBorderStyle, FormStartPosition, AnchorStyles,
+    Padding, GroupBox, DockStyle, ProgressBar
+)
+from System.Drawing import Point, Size, Font, FontStyle
+
+# pyRevit
 from pyrevit import revit, script
 
-# Helper for printing debug messages
-output = script.get_output()
-logger = script.get_logger()
+# --- PATCHES ---
+if not hasattr(sys.stdout, "flush"):
+    sys.stdout.flush = lambda: None
 
-def print_debug(msg):
-    """Prints debug messages to the pyRevit console."""
-    output.print_md(u"**DEBUG:** {}".format(msg))
+# --- GLOBALS ---
+output = script.get_output()
+doc = revit.doc
+uidoc = revit.uidoc
+
+# --- HELPER CLASSES ---
+
+class ConfigForm(Form):
+    """A simple Windows Forms dialog for configuring the script."""
+    def __init__(self, selected_count=0):
+        super(ConfigForm, self).__init__()
+        self.Text = "Snap to Ceiling Settings"
+        self.Size = Size(400, 450)
+        self.MinimumSize = Size(400, 450)
+        self.StartPosition = FormStartPosition.CenterScreen
+        self.FormBorderStyle = FormBorderStyle.FixedDialog
+        self.MaximizeBox = False
+        self.MinimizeBox = False
+        
+        self.selected_categories = []
+        self.target_parameter = "Offset from Host"
+        self.should_reselect = False
+
+        # 1. Selection Status
+        self.lbl_status = Label()
+        self.lbl_status.Text = "Selected Elements: {}".format(selected_count)
+        self.lbl_status.Location = Point(20, 20)
+        self.lbl_status.AutoSize = True
+        try:
+            self.lbl_status.Font = Font("Microsoft Sans Serif", 8.25, FontStyle.Bold)
+        except:
+            pass # Fallback to default
+        self.Controls.Add(self.lbl_status)
+
+        self.btn_reselect = Button()
+        self.btn_reselect.Text = "Select Objects"
+        self.btn_reselect.Location = Point(250, 15)
+        self.btn_reselect.Size = Size(110, 25)
+        self.btn_reselect.Click += self.on_reselect_click
+        self.Controls.Add(self.btn_reselect)
+
+        # 2. Parameter Settings
+        self.grp_param = GroupBox()
+        self.grp_param.Text = "Target Parameter"
+        self.grp_param.Location = Point(20, 60)
+        self.grp_param.Size = Size(340, 60)
+        self.Controls.Add(self.grp_param)
+
+        self.txt_param = TextBox()
+        self.txt_param.Text = self.target_parameter
+        self.txt_param.Location = Point(15, 25)
+        self.txt_param.Size = Size(310, 25)
+        self.grp_param.Controls.Add(self.txt_param)
+
+        # 3. Category Filter
+        self.grp_cats = GroupBox()
+        self.grp_cats.Text = "Filter by Category"
+        self.grp_cats.Location = Point(20, 140)
+        self.grp_cats.Size = Size(340, 180)
+        self.Controls.Add(self.grp_cats)
+
+        self.chk_list = CheckedListBox()
+        self.chk_list.Location = Point(15, 25)
+        self.chk_list.Size = Size(310, 140)
+        self.chk_list.CheckOnClick = True
+        # Default Categories
+        defaults = [
+            "Lighting Fixtures", 
+            "Electrical Fixtures", 
+            "Fire Alarm Devices", 
+            "Generic Models",
+            "Data Devices",
+            "Communication Devices"
+        ]
+        for cat in defaults:
+            self.chk_list.Items.Add(cat, True)
+        self.grp_cats.Controls.Add(self.chk_list)
+
+        # 4. Action Buttons
+        self.btn_run = Button()
+        self.btn_run.Text = "Align to Ceiling"
+        self.btn_run.Location = Point(20, 340)
+        self.btn_run.Size = Size(340, 40)
+        self.btn_run.Font = Font(self.Font, FontStyle.Bold)
+        self.btn_run.Click += self.on_run_click
+        self.btn_run.Enabled = selected_count > 0
+        self.Controls.Add(self.btn_run)
+
+    def on_reselect_click(self, sender, args):
+        self.should_reselect = True
+        self.Close()
+
+    def on_run_click(self, sender, args):
+        self.target_parameter = self.txt_param.Text
+        # Get checked categories
+        self.selected_categories = [
+            self.chk_list.Items[i] 
+            for i in range(self.chk_list.Items.Count) 
+            if self.chk_list.GetItemChecked(i)
+        ]
+        self.DialogResult = DialogResult.OK
+        self.Close()
+
+class ProgressBarForm(Form):
+    """A simple custom progress bar form."""
+    def __init__(self, max_value, title="Processing..."):
+        super(ProgressBarForm, self).__init__()
+        self.Text = title
+        self.Width = 400
+        self.Height = 120
+        self.FormBorderStyle = FormBorderStyle.FixedToolWindow
+        self.StartPosition = FormStartPosition.CenterScreen
+        self.ControlBox = False # Hide close button
+        
+        self.lbl = Label()
+        self.lbl.Location = Point(10, 15)
+        self.lbl.AutoSize = True
+        self.Controls.Add(self.lbl)
+        
+        self.pb = ProgressBar()
+        self.pb.Location = Point(10, 40)
+        self.pb.Width = 360
+        self.pb.Height = 25
+        self.pb.Maximum = max_value
+        self.Controls.Add(self.pb)
+        
+        self.Show()
+        self.Update()
+
+    def update_progress(self, value, msg):
+        if value <= self.pb.Maximum:
+            self.pb.Value = value
+        self.lbl.Text = msg
+        self.lbl.Update()
+        Application.DoEvents()
+
+# --- HELPER FUNCTIONS ---
 
 def get_parameter_value(param):
-    """Safe getter for parameter value based on storage type."""
-    if not param:
-        return 0.0
-    if param.StorageType == StorageType.Double:
-        return param.AsDouble()
-    elif param.StorageType == StorageType.Integer:
-        return param.AsInteger()
-    elif param.StorageType == StorageType.String:
-        return 0.0 # Cannot calculate with string
+    if not param: return 0.0
+    if param.StorageType == StorageType.Double: return param.AsDouble()
+    elif param.StorageType == StorageType.Integer: return param.AsInteger()
     return 0.0
 
 def set_parameter_value(param, value):
-    """Safe setter for parameter value."""
-    if not param or param.IsReadOnly:
-        return False
-    if param.StorageType == StorageType.Double:
-        return param.Set(value)
-    elif param.StorageType == StorageType.Integer:
-        return param.Set(int(value))
+    if not param or param.IsReadOnly: return False
+    if param.StorageType == StorageType.Double: return param.Set(value)
+    elif param.StorageType == StorageType.Integer: return param.Set(int(value))
     return False
 
+def get_category_name(element):
+    if hasattr(element, "Category") and element.Category:
+        return element.Category.Name
+    return "Unknown"
+
+# --- MAIN LOGIC ---
+
 def main():
-    doc = revit.doc
-    uidoc = revit.uidoc
     active_view = doc.ActiveView
-
-    # -------------------------------------------------------------------------
-    # 1. Validate Context (3D View)
-    # -------------------------------------------------------------------------
+    
     if active_view.ViewType != ViewType.ThreeD:
-        TaskDialog.Show(
-            "View Context Error",
-            "This script requires an active 3D View to calculate intersections.\n"
-            "Please switch to a 3D View and try again."
-        )
+        TaskDialog.Show("Error", "Please switch to a 3D View.")
         return
 
-    selection = revit.get_selection()
-    if not selection:
-        TaskDialog.Show("Selection Error", "Please select elements to adjust.")
+    # 1. UI Loop
+    try:
+        selection = uidoc.Selection.GetElementIds()
+        if selection:
+            current_ids = [id for id in selection]
+        else:
+            current_ids = []
+    except Exception as e:
+        output.print_md(u"**ERROR:** Error getting element IDs: {}".format(e))
+        current_ids = []
+
+    target_param_name = "Offset from Host"
+    target_categories = []
+    
+    while True:
+        # Show Form
+        try:
+            form = ConfigForm(len(current_ids))
+            # Restore previous text if loop
+            form.txt_param.Text = target_param_name
+            
+            result = form.ShowDialog()
+        except Exception as e:
+            output.print_md(u"**ERROR:** Error showing form: {}".format(e))
+            return
+        
+        if form.should_reselect:
+            try:
+                # Prompt user to pick objects
+                picked_refs = uidoc.Selection.PickObjects(Selection.ObjectType.Element, "Select elements to align")
+                current_ids = [r.ElementId for r in picked_refs]
+                
+                # Convert to .NET List for SetElementIds
+                element_id_list = List[ElementId](current_ids)
+                uidoc.Selection.SetElementIds(element_id_list) # Sync with Revit UI
+            except Exception as e:
+                output.print_md(u"**ERROR:** Error during reselection: {}".format(e))
+                # User cancelled pick
+                pass
+            continue # Loop back to show form with new count
+            
+        elif result == DialogResult.OK:
+            target_param_name = form.target_parameter
+            target_categories = form.selected_categories
+            break # Proceed to script
+        else:
+            return # Cancel script
+
+    # 2. Filter Selection
+    elements_to_process = []
+    for eid in current_ids:
+        el = doc.GetElement(eid)
+        if get_category_name(el) in target_categories:
+            elements_to_process.append(el)
+            
+    if not elements_to_process:
+        TaskDialog.Show("Info", "No elements matched the selected categories.")
         return
 
-    # -------------------------------------------------------------------------
-    # 2. Setup Reference Intersector
-    # -------------------------------------------------------------------------
-    print_debug("Setting up ReferenceIntersector...")
-    
-    # Target Ceilings
-    target_category_filter = ElementCategoryFilter(BuiltInCategory.OST_Ceilings)
-    
-    # Initialize Intersector
-    # FindReferenceTarget.All allows finding faces, edges, etc. usually Mesh or Element is enough but All is safest.
-    intersector = ReferenceIntersector(target_category_filter, FindReferenceTarget.All, active_view)
-    intersector.FindReferencesInRevitLinks = True # CRITICAL for linked models
-    
-    # -------------------------------------------------------------------------
-    # 3. Process Selected Elements
-    # -------------------------------------------------------------------------
-    print_debug("Processing {} selected elements...".format(len(selection)))
-    
-    moved_elements_report = []
-    
+    # 3. Setup Intersector
+    intersector = ReferenceIntersector(
+        ElementCategoryFilter(BuiltInCategory.OST_Ceilings), 
+        FindReferenceTarget.All, 
+        active_view
+    )
+    intersector.FindReferencesInRevitLinks = True
+
+    # 4. Processing
     t = Transaction(doc, "Snap Elements to Ceiling")
     t.Start()
     
     modified_count = 0
+    moved_elements_report = []
+    total = len(elements_to_process)
     
-    for el in selection:
+    # Init Custom Progress Bar
+    pb_form = None
+    try:
+        pb_form = ProgressBarForm(total, "Snapping to Ceiling...")
+    except Exception as e:
+        output.print_md(u"**WARNING:** Could not create progress bar: {}".format(e))
+
+    for i, el in enumerate(elements_to_process):
+        if pb_form:
+            pb_form.update_progress(i, "Checking ID {}".format(el.Id))
+        
         try:
-            # Get Location Point
-            if not hasattr(el.Location, "Point"):
-                print_debug("Element ID {} has no point location. Skipping.".format(el.Id))
-                continue
+            if not hasattr(el.Location, "Point"): continue
             
             location_pt = el.Location.Point
             
-            # -----------------------------------------------------------------
-            # 4. Cast Rays (Up and Down)
-            # -----------------------------------------------------------------
-            # We use the location point as origin. 
-            # We might need to lift/lower the origin slightly to avoid self-intersection if the element IS the ceiling (unlikely here)
-            # But since we are looking for linked ceilings, self-intersection is less of a risk unless they overlap.
-            
+            # Cast Rays
             ref_up = intersector.FindNearest(location_pt, XYZ.BasisZ)
             ref_down = intersector.FindNearest(location_pt, XYZ.BasisZ.Negate())
             
@@ -128,104 +309,70 @@ def main():
             dist_down = float('inf')
 
             if ref_up:
-                hit_pt_up = ref_up.GetReference().GlobalPoint
-                dist_up = hit_pt_up.DistanceTo(location_pt)
-                print_debug("ID {}: Found ceiling ABOVE at dist {}".format(el.Id, dist_up))
-            
+                dist_up = ref_up.GetReference().GlobalPoint.DistanceTo(location_pt)
             if ref_down:
-                hit_pt_down = ref_down.GetReference().GlobalPoint
-                dist_down = hit_pt_down.DistanceTo(location_pt)
-                print_debug("ID {}: Found ceiling BELOW at dist {}".format(el.Id, dist_down))
+                dist_down = ref_down.GetReference().GlobalPoint.DistanceTo(location_pt)
 
-            # Determine closest ceiling
-            closest_dist = float('inf')
-            
             if dist_up < dist_down:
                 target_pt = ref_up.GetReference().GlobalPoint
-                closest_dist = dist_up
             elif dist_down < dist_up:
                 target_pt = ref_down.GetReference().GlobalPoint
-                closest_dist = dist_down
             
-            if not target_pt:
-                print_debug("ID {}: No ceiling found vertically.".format(el.Id))
-                continue
+            if not target_pt: continue
 
-            # -----------------------------------------------------------------
-            # 5. Adjust Parameter
-            # -----------------------------------------------------------------
-            # TODO: Expand logic to allow user to select which parameter to adjust (e.g. via UI)
-            
-            # Strategy: Find the vertical delta required
-            # Current Z = location_pt.Z
-            # Target Z = target_pt.Z
-            # Delta = Target Z - Current Z
-            
+            # Calc Delta
             z_delta = target_pt.Z - location_pt.Z
             
-            # Try to find a valid parameter
-            # Priority: "Offset from Host" -> "Elevation from Level" -> "Offset"
-            param_names = ["Offset from Host", "Elevation from Level", "Offset"]
-            target_param = None
-            
-            for p_name in param_names:
-                p = el.LookupParameter(p_name)
-                if p and not p.IsReadOnly:
-                    target_param = p
-                    print_debug("ID {}: Using parameter '{}'".format(el.Id, p_name))
-                    break
-            
-            if target_param:
-                # Special logic: Reset 'Mounting Height' if using 'Offset from Host'
-                if target_param.Definition.Name == "Offset from Host":
-                    mounting_height_param = el.LookupParameter("Mounting Height")
-                    if mounting_height_param and not mounting_height_param.IsReadOnly:
-                        set_parameter_value(mounting_height_param, 0)
-                        print_debug("ID {}: Reset 'Mounting Height' to 0".format(el.Id))
-
-                current_val = get_parameter_value(target_param)
+            # Param Logic
+            p = el.LookupParameter(target_param_name)
+            if p and not p.IsReadOnly:
+                # Reset Mounting Height if applicable
+                if target_param_name == "Offset from Host":
+                    mh = el.LookupParameter("Mounting Height")
+                    if mh and not mh.IsReadOnly: set_parameter_value(mh, 0)
+                
+                current_val = get_parameter_value(p)
                 new_val = current_val + z_delta
                 
-                success = set_parameter_value(target_param, new_val)
-                if success:
+                if set_parameter_value(p, new_val):
                     modified_count += 1
                     
-                    # Gather data for report
+                    # Report Data
                     try:
                         el_type = doc.GetElement(el.GetTypeId())
-                        fam_name = el_type.FamilyName if el_type else "Unknown"
-                        type_name = el_type.Name if el_type else "Unknown"
+                        fam = el_type.FamilyName if el_type else "?"
+                        typ = el_type.Name if el_type else "?"
                     except:
-                        fam_name = "Unknown"
-                        type_name = "Unknown"
-
-                    fmt_delta = "{:.2f}".format(z_delta)
+                        fam, typ = "?", "?"
                     
-                    moved_elements_report.append({
-                        "Element ID": output.linkify(el.Id),
-                        "Family": fam_name,
-                        "Type": type_name,
-                        "Adjustment": fmt_delta
-                    })
-                else:
-                    print_debug("ID {}: Failed to set parameter.".format(el.Id))
-            else:
-                print_debug("ID {}: No suitable writable parameter found.".format(el.Id))
+                    # Store as list for robust table printing
+                    moved_elements_report.append([
+                        str(el.Id.IntegerValue),
+                        get_category_name(el),
+                        fam,
+                        typ,
+                        "{:.2f}".format(z_delta)
+                    ])
 
         except Exception as e:
-            print_debug("Error processing element {}: {}".format(el.Id, str(e)))
-            
+            output.print_md(u"**ERROR:** Error processing element {}: {}".format(el.Id, e))
+
     t.Commit()
     
+    if pb_form:
+        pb_form.Close()
+    
+    # 5. Final Report
     if moved_elements_report:
         output.print_table(
             table_data=moved_elements_report,
             title="Summary of Adjusted Elements",
-            columns=["Element ID", "Family", "Type", "Adjustment"],
-            formats=["", "", "", ""]
+            columns=["Element ID", "Category", "Family", "Type", "Adjustment"]
         )
-    
-    print_debug("Finished. Modified {} elements.".format(modified_count))
+    else:
+        output.print_md("No elements were moved.")
+
+    output.print_md("Finished. Modified {} elements.".format(modified_count))
 
 if __name__ == "__main__":
     main()
