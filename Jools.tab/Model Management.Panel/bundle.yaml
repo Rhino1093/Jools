@@ -5,3 +5,7 @@ layout:
   - BulkRVTUpgrade
   - BulkExportNWCFiles
   - ExportParameters
+  - SaveToACC
+  - RelinkToCloud
+  - CopyFilters
+  - CopyTemplateFilters

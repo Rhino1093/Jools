@@ -1,51 +1,36 @@
 from __future__ import annotations
-
 from typing import Any, Iterable, Mapping, MutableMapping, Optional, Sequence
 
+def alert(msg: str, title: str = "", ok: bool = True, cancel: bool = False, warn_icon: bool = True) -> bool: ...
+def ask_for_string(default: str = "", prompt: str = "", title: str = "") -> str: ...
+def select_file(extensions: Sequence[str] = ..., multiple: bool = False) -> str | Sequence[str]: ...
+def select_elements(title: str = "") -> Sequence[Any]: ...
 
 class _FormComponent(object):
     name: str
-
     def __init__(self, name: str, *args: Any, **kwargs: Any) -> None: ...
-
 
 class Label(_FormComponent):
     text: str
-
     def __init__(self, text: str) -> None: ...
-
 
 class ComboBox(_FormComponent):
     values: Sequence[Any]
     default: Any
-
-    def __init__(
-        self,
-        name: str,
-        values: Mapping[str, Any] | Sequence[Any],
-        default: Any | None = ...,
-    ) -> None: ...
-
+    def __init__(self, name: str, values: Mapping[str, Any] | Sequence[Any], default: Any | None = ...) -> None: ...
 
 class TextBox(_FormComponent):
     Text: str
-
     def __init__(self, name: str, Text: str = "", **kwargs: Any) -> None: ...
-
 
 class CheckBox(_FormComponent):
     state: bool
-
     def __init__(self, name: str, text: str = "", default: bool = False) -> None: ...
-
 
 class Separator(_FormComponent):
     def __init__(self) -> None: ...
 
-
 class FlexForm(object):
     values: MutableMapping[str, Any]
-
     def __init__(self, title: str, components: Sequence[Any]) -> None: ...
-
     def show(self) -> bool: ...

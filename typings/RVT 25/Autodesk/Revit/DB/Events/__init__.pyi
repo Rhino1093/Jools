@@ -199,6 +199,37 @@ class ElementTypeDuplicatedEventArgs(RevitAPIPostDocEventArgs):
     def NewElementTypeId(self) -> ElementId: ...
 
 
+class ExternalDataInstanceAddingIntoDocumentEventArgs(RevitAPIPreDocEventArgs):
+    @property
+    def TypeId(self) -> ElementId: ...
+
+
+class ExternalDataInstanceAddedIntoDocumentEventArgs(RevitAPIPostDocEventArgs):
+    @property
+    def TypeId(self) -> ElementId: ...
+    @property
+    def ProjectId(self) -> str: ...
+    @property
+    def ItemId(self) -> str: ...
+    @property
+    def NewInstanceId(self) -> ElementId: ...
+
+
+class ExternalDataInstanceRemovingFromDocumentEventArgs(RevitAPIPreDocEventArgs):
+    @property
+    def TypeId(self) -> ElementId: ...
+    @property
+    def InstanceId(self) -> ElementId: ...
+
+
+class ExternalDataInstanceRemovedFromDocumentEventArgs(RevitAPIPostDocEventArgs):
+    @property
+    def TypeId(self) -> ElementId: ...
+
+
+class ExternalDataTypeServerFailureResolutionExecutingEventArgs(RevitAPIPreDocEventArgs):
+
+
 class FailuresProcessingEventArgs(RevitAPISingleEventArgs):
     def SetProcessingResult(self, result: FailureProcessingResult) -> None: ...
     def GetProcessingResult(self) -> FailureProcessingResult: ...
@@ -244,6 +275,8 @@ class FileExportingEventArgs(RevitAPIPreDocEventArgs):
     def Path(self) -> str: ...
     @property
     def Format(self) -> ImportExportFileFormat: ...
+    @property
+    def BackgroundOperation(self) -> bool: ...
 
 
 class FileExportedEventArgs(RevitAPIPostDocEventArgs):
@@ -251,6 +284,8 @@ class FileExportedEventArgs(RevitAPIPostDocEventArgs):
     def Path(self) -> str: ...
     @property
     def Format(self) -> ImportExportFileFormat: ...
+    @property
+    def BackgroundOperation(self) -> bool: ...
 
 
 class ViewExportingEventArgs(RevitAPIPreDocEventArgs):
@@ -282,6 +317,8 @@ class LinkedResourceOpenedEventArgs(RevitAPIPostDocEventArgs):
     @property
     def ResourceType(self) -> ExternalResourceType: ...
     @property
+    def ResourceTypeId(self) -> ElementId: ...
+    @property
     def LinkedResourcePathName(self) -> str: ...
 
 
@@ -297,6 +334,9 @@ class ProgressChangedEventArgs(RevitAPISingleEventArgs):
     @property
     def Caption(self) -> str: ...
     def Cancel(self) -> None: ...
+
+
+class ProjectBrowserDataChangedEventArgs(RevitAPISingleEventArgs):
 
 
 class DocumentReloadingLatestEventArgs(RevitAPIPreDocEventArgs):

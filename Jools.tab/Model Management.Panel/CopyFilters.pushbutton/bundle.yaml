@@ -1,0 +1,3 @@
+title: "Copy Filters"
+tooltip: "Select filters from another open project and copy them to the current project.\nIf a filter name exists, the new copy will be renamed with '_Copy1'."
+help_url: "https://www.revitapidocs.com/2023/885698b6-a67b-489d-8c6c-6798835848c4.htm"

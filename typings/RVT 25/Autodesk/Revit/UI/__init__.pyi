@@ -125,6 +125,10 @@ class ExternalCommandData(APIObject):
     def JournalData(self, data: IDictionary) -> None: ...
 
 
+class IContextMenuCreator:
+    def BuildContextMenu(self, menu: ContextMenu) -> None: ...
+
+
 class DockablePaneState:
     @overload
     def __init__(self, other: DockablePaneState): ...
@@ -260,6 +264,7 @@ class UIApplication:
     @property
     def ProductIsRS(self) -> bool: ...
     def RegisterDockablePane(self, id: DockablePaneId, title: str, provider: IDockablePaneProvider) -> None: ...
+    def RegisterContextMenu(self, fullClassName: str, creator: IContextMenuCreator) -> None: ...
     @property
     def MainWindowHandle(self) -> IntPtr: ...
     @property
@@ -298,7 +303,18 @@ class UIApplication:
     def remove_TransferringProjectStandards(self, handler: EventHandler) -> None: ...
     def add_TransferredProjectStandards(self, handler: EventHandler) -> None: ...
     def remove_TransferredProjectStandards(self, handler: EventHandler) -> None: ...
+    def add_SelectionChanged(self, handler: EventHandler) -> None: ...
+    def remove_SelectionChanged(self, handler: EventHandler) -> None: ...
+    def add_ThemeChanged(self, handler: EventHandler) -> None: ...
+    def remove_ThemeChanged(self, handler: EventHandler) -> None: ...
+    def add_MacroUpdated(self, handler: EventHandler) -> None: ...
+    def remove_MacroUpdated(self, handler: EventHandler) -> None: ...
     def Dispose(self) -> None: ...
+
+
+class ThemeType:
+    CanvasTheme = 0
+    UITheme = 1
 
 
 class Tab:
@@ -423,10 +439,9 @@ class PostableCommand:
     ReloadLatest = 1729
     Render = 1782
     ShowHistory = 1985
-    SplitSurface = 1992
-    DrawOnFace = 2706
-    DrawOnWorkPlane = 2707
     GrayInactiveWorksets = 2765
+    DrawOnFace = 3096
+    DrawOnWorkPlane = 3097
     ImportGBXML = 3102
     ExportReportsRoomOrAreaReport = 3125
     SheetIssuesOrRevisions = 3153
@@ -440,9 +455,7 @@ class PostableCommand:
     SpecifyCoordinatesAtPoint = 3266
     ExportIFC = 3278
     SystemBrowser = 3280
-    ResetAnalyticalModel = 3288
-    ExportOptionsIFCOptions = 3292
-    TypeProperties = 3302
+    ExportCADFormatsSTEP = 3340
     ExportDWFOrDWFx = 3341
     ExportCADFormatsDWG = 3342
     ExportCADFormatsDXF = 3343
@@ -458,17 +471,13 @@ class PostableCommand:
     ImportTypes = 3404
     ExportExportTypes = 3405
     OpenIFCOptions = 3409
-    CheckMemberSupports = 3410
-    AnalyticalConsistencyChecks = 3411
     KeynoteLegend = 3449
     KeynotingSettings = 3450
-    OpenBuildingComponent = 3470
     Web = 3619
     TopChord = 3620
     BottomChord = 3621
     ShapeStatus = 3640
     TogglePropertiesPalette = 4534
-    CoordinationModel = 4561
     StatusBarWorksets = 4609
     StatusBarDesignOptions = 4610
     ReinforcementNumbers = 4700
@@ -484,6 +493,7 @@ class PostableCommand:
     Space = 32784
     SpaceTag = 32785
     SpaceSeparator = 32786
+    TypeProperties = 32790
     Level = 32794
     FramingElevation = 32814
     ArchitecturalFloor = 32914
@@ -522,6 +532,7 @@ class PostableCommand:
     Redo = 33031
     Undo = 33032
     Control = 33034
+    PickAPlane = 33078
     Filters = 33099
     TemporaryDimensions = 33100
     LinePatterns = 33120
@@ -601,7 +612,6 @@ class PostableCommand:
     Worksets = 33460
     Phases = 33472
     PropertyLine = 33480
-    BuildingPad = 33481
     ImportImage = 33499
     ImportPDF = 33503
     MatchTypeProperties = 33513
@@ -618,7 +628,6 @@ class PostableCommand:
     SheetList = 33631
     AreaPlan = 33638
     GradedRegion = 33640
-    Toposurface = 33641
     ManageImages = 33648
     ApplyTemplatePropertiesToCurrentView = 33651
     RevealWall = 33654
@@ -649,7 +658,6 @@ class PostableCommand:
     UnjoinGeometry = 33730
     SwitchJoinOrder = 33731
     TagAllNotTagged = 33735
-    MergeSurfaces = 33742
     SharedParameters = 33748
     LegendComponent = 33751
     Offset = 33757
@@ -672,6 +680,7 @@ class PostableCommand:
     IdsOfSelection = 33866
     SelectById = 33867
     PublishCoordinates = 33869
+    ParametersService = 33870
     PlanRegion = 33900
     BrowserOrganization = 33904
     Matchline = 33905
@@ -681,7 +690,6 @@ class PostableCommand:
     PickToEdit = 33910
     EditingRequests = 33911
     SaveAsLibraryFamily = 33923
-    Subregion = 34964
     Railing = 34969
     Beam = 34972
     Brace = 34973
@@ -690,7 +698,6 @@ class PostableCommand:
     SpanDirectionSymbol = 34980
     StructuralFloor = 34985
     Scale = 34986
-    Loads = 34987
     StructuralSettings = 34993
     ReferenceLine = 34994
     RebarCoverSettings = 35003
@@ -716,6 +723,8 @@ class PostableCommand:
     LoadSelection = 35180
     SaveSelection = 35181
     EditSelection = 35183
+    ActivateControlsAndDimensions = 35194
+    ShowWorksharingMakeEditableControls = 35195
     MultiCategoryTag = 35203
     BoundaryConditions = 35223
     StructuralPathReinforcement = 35225
@@ -745,7 +754,6 @@ class PostableCommand:
     NavigationBar = 35631
     FormWorkPlaneView = 35703
     ReconcileHosting = 35708
-    AdjustAnalyticalModel = 35739
     DiameterDimension = 35778
     DiameterDimensionTypes = 35779
     StructuralFabricArea = 35781
@@ -759,9 +767,8 @@ class PostableCommand:
     LinearMultiRebarAnnotation = 35832
     FabricationSettings = 35839
     LinkIFC = 35853
-    LinkFormit = 35856
     SelectionBox = 35857
-    StructuralRebarCoupler = 35862
+    InsertCoupler = 35862
     PAndIDModeler = 35882
     PAndIDSettings = 35883
     TogglePAndIDModelerBrowser = 35884
@@ -837,6 +844,14 @@ class PostableCommand:
     InPlaceMass = 42645
     SynchronizeNow = 42654
     StructuralTrusses = 43213
+    CreateAnAreaBasedLoad = 43641
+    AreaBasedLoadBoundary = 43647
+    EquipmentLoad = 43648
+    MEPFabricationDuctworkStiffener = 43659
+    ShowBoundaryOpenEnds = 45665
+    MechanicalControlDevice = 45673
+    PlumbingEquipment = 45674
+    HideBoundaryOpenEnds = 45676
     ShowLastReport = 46061
     GraphicalColumnSchedule = 46139
     ApplyCoping = 46450
@@ -848,6 +863,7 @@ class PostableCommand:
     VoidSweptBlend = 47164
     EditRebarCover = 48583
     ColorSchemes = 48739
+    AnalyticalLink = 48756
     TrimOrExtendToCorner = 48952
     TrimOrExtendSingleElement = 48953
     TrimOrExtendMultipleElements = 48954
@@ -868,6 +884,8 @@ class PostableCommand:
     OpenProject = 51800
     LoadCases = 53531
     LoadCombinations = 53532
+    BoundaryConditionsSettings = 53534
+    LoadsScalingDisplay = 53538
     FindOrReplace = 53591
     EnergySettings = 53612
     Generate = 53613
@@ -883,7 +901,6 @@ class PostableCommand:
     GlobalParameters = 54055
     Collaborate = 54057
     CollaborateInCloud = 54058
-    ManageCloudModels = 54059
     PublishSettings = 54064
     AssemblyCode = 54096
     RevealObstacles = 54111
@@ -919,13 +936,32 @@ class PostableCommand:
     SystemsAnalysis = 56254
     LinkPDF = 56281
     LinkImage = 56282
+    AnalyticalMember = 56298
     BatchPrint = 56308
     WorksharingMonitor = 56309
     SharedViews = 56329
     ResetSharedCoordinates = 56335
-    GenerateAnalysis = 56376
-    ViewAnalysis = 56377
+    ElectricalAnalyticalLoadTypeSettings = 56345
     OpenCloudModel = 56379
+    DynamoPlayerForSteel = 56443
+    PanelByBoundary = 56448
+    Toposolid = 56481
+    CreateFromImport = 56504
+    AnalyticalAutomation = 56516
+    RebarBendingDetail = 56523
+    PanelByExtrusion = 56525
+    CoordinationModelLocal = 56559
+    CoordinationModelAutodeskDocs = 56560
+    Loads = 56584
+    PropertyLineData = 56663
+    PDF = 56711
+    CoordinationModelChanges = 56713
+    ToposolidByFace = 56723
+    OperatingSchedules = 56745
+    ToposolidSmoothShading = 56764
+    LaunchAsApp = 56806
+    LaunchInBrowser = 56807
+    LaunchInDockedWindow = 56808
     SpaceNaming = 57269
     DynamoPlayer = 57282
     RepairCentralModel = 57283
@@ -943,6 +979,7 @@ class PostableCommand:
     PasteFromClipboard = 57637
     TabViews = 57650
     TileViews = 57652
+    CanvasTheme = 57654
     ExitRevit = 57665
     StatusBar = 59393
 
@@ -979,6 +1016,7 @@ class UIControlledApplication:
     @property
     def ProductIsRS(self) -> bool: ...
     def RegisterDockablePane(self, id: DockablePaneId, title: str, provider: IDockablePaneProvider) -> None: ...
+    def RegisterContextMenu(self, fullClassName: str, creator: IContextMenuCreator) -> None: ...
     @property
     def MainWindowHandle(self) -> IntPtr: ...
     def add_ViewActivating(self, handler: EventHandler) -> None: ...
@@ -1005,6 +1043,10 @@ class UIControlledApplication:
     def remove_TransferringProjectStandards(self, handler: EventHandler) -> None: ...
     def add_TransferredProjectStandards(self, handler: EventHandler) -> None: ...
     def remove_TransferredProjectStandards(self, handler: EventHandler) -> None: ...
+    def add_SelectionChanged(self, handler: EventHandler) -> None: ...
+    def remove_SelectionChanged(self, handler: EventHandler) -> None: ...
+    def add_ThemeChanged(self, handler: EventHandler) -> None: ...
+    def remove_ThemeChanged(self, handler: EventHandler) -> None: ...
 
 
 class IExternalApplication:
@@ -1092,6 +1134,20 @@ class UIView:
     def Dispose(self) -> None: ...
 
 
+class ItemData:
+    @property
+    def Name(self) -> str: ...
+    @Name.setter
+    def Name(self, name: str) -> None: ...
+    @property
+    def ToolTip(self) -> str: ...
+    @ToolTip.setter
+    def ToolTip(self, toolTip: str) -> None: ...
+    @property
+    def IsValidObject(self) -> bool: ...
+    def Dispose(self) -> None: ...
+
+
 class ContextualHelp:
     def __init__(self, helpType: ContextualHelpType, helpPath: str): ...
     @property
@@ -1143,15 +1199,7 @@ class RibbonItem:
     def SetContextualHelp(self, contextualHelp: ContextualHelp) -> None: ...
 
 
-class RibbonItemData:
-    @property
-    def Name(self) -> str: ...
-    @Name.setter
-    def Name(self, name: str) -> None: ...
-    @property
-    def ToolTip(self) -> str: ...
-    @ToolTip.setter
-    def ToolTip(self, toolTip: str) -> None: ...
+class RibbonItemData(ItemData):
     @property
     def LongDescription(self) -> str: ...
     @LongDescription.setter
@@ -1529,16 +1577,41 @@ class TaskDialogIcon:
     TaskDialogIconWarning = 65535
 
 
+class FileDialog:
+    @property
+    def Filter(self) -> str: ...
+    @Filter.setter
+    def Filter(self, filter: str) -> None: ...
+    @property
+    def Title(self) -> str: ...
+    @Title.setter
+    def Title(self, title: str) -> None: ...
+    @property
+    def DefaultFilterEntry(self) -> str: ...
+    @DefaultFilterEntry.setter
+    def DefaultFilterEntry(self, defaultFilterEntry: str) -> None: ...
+    @property
+    def IsValidObject(self) -> bool: ...
+    def GetSelectedModelPath(self) -> ModelPath: ...
+    def Show(self) -> ItemSelectionDialogResult: ...
+    def IsValidFilterString(filterString: str) -> bool: ...
+    def Dispose(self) -> None: ...
+
+
 class UIThemeManager:
     def GetThemeName(frameTheme: UITheme) -> str: ...
-    @property
-    def DefaultTheme() -> UITheme: ...
-    @DefaultTheme.setter
-    def DefaultTheme(frameTheme: UITheme) -> None: ...
     @property
     def CurrentTheme() -> UITheme: ...
     @CurrentTheme.setter
     def CurrentTheme(frameTheme: UITheme) -> None: ...
+    @property
+    def FollowSystemColorTheme() -> bool: ...
+    @FollowSystemColorTheme.setter
+    def FollowSystemColorTheme(bFollowSystemColor: bool) -> None: ...
+    @property
+    def CurrentCanvasTheme() -> UITheme: ...
+    @CurrentCanvasTheme.setter
+    def CurrentCanvasTheme(theme: UITheme) -> None: ...
 
 
 class ColorSelectionDialog:
@@ -1552,6 +1625,34 @@ class ColorSelectionDialog:
     @property
     def IsValidObject(self) -> bool: ...
     def Show(self) -> ItemSelectionDialogResult: ...
+    def Dispose(self) -> None: ...
+
+
+class MenuItem:
+    @property
+    def IsValidObject(self) -> bool: ...
+    def Dispose(self) -> None: ...
+
+
+class CommandMenuItem(MenuItem):
+    def __init__(self, name: str, className: str, assemblyName: str): ...
+    def SetToolTip(self, toolTip: str) -> None: ...
+    def SetAvailabilityClassName(self, availabilityClassName: str) -> None: ...
+
+
+class SubMenuItem(MenuItem):
+    def __init__(self, name: str, subMenu: ContextMenu): ...
+
+
+class SeparatorItem(MenuItem):
+    def __init__(self): ...
+
+
+class ContextMenu:
+    def __init__(self): ...
+    @property
+    def IsValidObject(self) -> bool: ...
+    def AddItem(self, menuItem: MenuItem) -> None: ...
     def Dispose(self) -> None: ...
 
 
@@ -1576,6 +1677,8 @@ class BuiltInDockablePanes:
     @property
     def RebarBrowser() -> DockablePaneId: ...
     @property
+    def SharedViews() -> DockablePaneId: ...
+    @property
     def SystemNavigator() -> DockablePaneId: ...
     @property
     def ViewBrowser() -> DockablePaneId: ...
@@ -1590,6 +1693,24 @@ class DoubleClickOptions:
     def GetAction(self, target: DoubleClickTarget) -> DoubleClickAction: ...
     def SetAction(self, target: DoubleClickTarget, action: DoubleClickAction) -> None: ...
     def IsSupportedAction(self, target: DoubleClickTarget, action: DoubleClickAction) -> bool: ...
+    def Dispose(self) -> None: ...
+
+
+class ExternalCommandsData:
+    @property
+    def ClassName(self) -> str: ...
+    @ClassName.setter
+    def ClassName(self, className: str) -> None: ...
+    @property
+    def AssemblyName(self) -> str: ...
+    @AssemblyName.setter
+    def AssemblyName(self, assemblyName: str) -> None: ...
+    @property
+    def AvailabilityClassName(self) -> str: ...
+    @AvailabilityClassName.setter
+    def AvailabilityClassName(self, availabilityClassName: str) -> None: ...
+    @property
+    def IsValidObject(self) -> bool: ...
     def Dispose(self) -> None: ...
 
 
@@ -1610,27 +1731,6 @@ class FamilyInstancePlacingArgs:
     def TooltipMessage(self, tooltipMessage: str) -> None: ...
     @property
     def IsValidObject(self) -> bool: ...
-    def Dispose(self) -> None: ...
-
-
-class FileDialog:
-    @property
-    def Filter(self) -> str: ...
-    @Filter.setter
-    def Filter(self, filter: str) -> None: ...
-    @property
-    def Title(self) -> str: ...
-    @Title.setter
-    def Title(self, title: str) -> None: ...
-    @property
-    def DefaultFilterEntry(self) -> str: ...
-    @DefaultFilterEntry.setter
-    def DefaultFilterEntry(self, defaultFilterEntry: str) -> None: ...
-    @property
-    def IsValidObject(self) -> bool: ...
-    def GetSelectedModelPath(self) -> ModelPath: ...
-    def Show(self) -> ItemSelectionDialogResult: ...
-    def IsValidFilterString(filterString: str) -> bool: ...
     def Dispose(self) -> None: ...
 
 
@@ -1677,6 +1777,50 @@ class IExternalResourceUIServer:
     def HandleBrowseResult(self, resultType: ExternalResourceUIBrowseResultType, browsingItemPath: str) -> None: ...
 
 
+class IFCExternalServiceUIData:
+    @property
+    def SelectedIFCItem(self) -> str: ...
+    @SelectedIFCItem.setter
+    def SelectedIFCItem(self, selectedIFCItem: str) -> None: ...
+    @property
+    def ParamId(self) -> ElementId: ...
+    @property
+    def IsReset(self) -> bool: ...
+    @IsReset.setter
+    def IsReset(self, isReset: bool) -> None: ...
+    @property
+    def Document(self) -> Document: ...
+    @property
+    def IsValidObject(self) -> bool: ...
+    def GetParentHwnd(self) -> IntPtr: ...
+    def GetRevitElementIds(self) -> List[ElementId]: ...
+    def Dispose(self) -> None: ...
+
+
+class IIFCEntityTreeUIServer:
+    def ShowDialog(self, data: IFCExternalServiceUIData) -> bool: ...
+
+
+class IRevisionsOnSheetUIServer:
+    def ShowDialog(self, data: RevisionsOnSheetUIServiceData) -> bool: ...
+
+
+class RevisionsOnSheetUIServiceData:
+    @property
+    def ParamId(self) -> ElementId: ...
+    @property
+    def IsReset(self) -> bool: ...
+    @IsReset.setter
+    def IsReset(self, isReset: bool) -> None: ...
+    @property
+    def Document(self) -> Document: ...
+    @property
+    def IsValidObject(self) -> bool: ...
+    def GetParentHwnd(self) -> IntPtr: ...
+    def GetRevitElementIds(self) -> List[ElementId]: ...
+    def Dispose(self) -> None: ...
+
+
 class ITemporaryGraphicsHandler:
     def OnClick(self, data: TemporaryGraphicsCommandData) -> None: ...
 
@@ -1688,6 +1832,17 @@ class TemporaryGraphicsCommandData:
     def Index(self) -> int: ...
     @property
     def IsValidObject(self) -> bool: ...
+    def Dispose(self) -> None: ...
+
+
+class ProjectBrowserOptions:
+    @property
+    def ShowViewPlacementOnSheetStatusIcons(self) -> bool: ...
+    @ShowViewPlacementOnSheetStatusIcons.setter
+    def ShowViewPlacementOnSheetStatusIcons(self, showViewPlacementOnSheetStatusIcons: bool) -> None: ...
+    @property
+    def IsValidObject(self) -> bool: ...
+    def GetProjectBrowserOptions() -> ProjectBrowserOptions: ...
     def Dispose(self) -> None: ...
 
 
@@ -1723,23 +1878,13 @@ class SelectionUIOptions:
     @SelectPinned.setter
     def SelectPinned(self, selectPinned: bool) -> None: ...
     @property
+    def ActivateControlsAndDimensionsOnMultiSelect(self) -> bool: ...
+    @ActivateControlsAndDimensionsOnMultiSelect.setter
+    def ActivateControlsAndDimensionsOnMultiSelect(self, activateControlsAndDimensions: bool) -> None: ...
+    @property
     def IsValidObject(self) -> bool: ...
     def GetSelectionUIOptions() -> SelectionUIOptions: ...
     def ElementSelectsAsPinned(document: Document, element: Element) -> bool: ...
-    def Dispose(self) -> None: ...
-
-
-class SetupEnergySimulationDialog:
-    def __init__(self): ...
-    @property
-    def ProjectName(self) -> str: ...
-    @property
-    def ProjectId(self) -> int: ...
-    @property
-    def RunName(self) -> str: ...
-    @property
-    def IsValidObject(self) -> bool: ...
-    def Show(self) -> SetupEnergySimulationDialogResult: ...
     def Dispose(self) -> None: ...
 
 
@@ -1792,14 +1937,14 @@ class UIFabricationUtils:
     def GetOpenConnectorIndicatorAwayColor() -> Color: ...
 
 
-class UITheme:
-    Dark = 0
-    Light = 1
-
-
 class ItemSelectionDialogResult:
     Confirmed = 0
     Canceled = 1
+
+
+class UITheme:
+    Dark = 0
+    Light = 1
 
 
 class DoubleClickTarget:
@@ -1819,8 +1964,3 @@ class DoubleClickAction:
     ActivateView = 3
     EnterEditMode = 4
     DeactivateView = 5
-
-
-class SetupEnergySimulationDialogResult:
-    Continue = 1
-    Cancel = 2

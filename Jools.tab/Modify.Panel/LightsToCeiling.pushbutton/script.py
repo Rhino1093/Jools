@@ -117,7 +117,8 @@ class ConfigForm(Form):
             "Fire Alarm Devices", 
             "Generic Models",
             "Data Devices",
-            "Communication Devices"
+            "Communication Devices",
+            "Security Devices"
         ]
         for cat in defaults:
             self.chk_list.Items.Add(cat, True)
@@ -199,6 +200,30 @@ def get_category_name(element):
     if hasattr(element, "Category") and element.Category:
         return element.Category.Name
     return "Unknown"
+
+def get_ceiling_element_from_ref(doc, ref):
+    if ref.LinkedElementId != ElementId.InvalidElementId:
+        link_instance = doc.GetElement(ref.ElementId)
+        if link_instance:
+            link_doc = link_instance.GetLinkDocument()
+            if link_doc:
+                return link_doc.GetElement(ref.LinkedElementId)
+    else:
+        return doc.GetElement(ref.ElementId)
+    return None
+
+def get_element_thickness(element):
+    if not element: return 0.0
+    try:
+        # Use the element's document (could be a linked doc)
+        doc = element.Document 
+        el_type = doc.GetElement(element.GetTypeId())
+        if hasattr(el_type, "GetCompoundStructure"):
+            cs = el_type.GetCompoundStructure()
+            if cs: return cs.GetWidth()
+    except:
+        pass
+    return 0.0
 
 # --- MAIN LOGIC ---
 
@@ -317,6 +342,16 @@ def main():
                 target_pt = ref_up.GetReference().GlobalPoint
             elif dist_down < dist_up:
                 target_pt = ref_down.GetReference().GlobalPoint
+                
+                # Adjust for ceiling thickness if hitting the top
+                try:
+                    hit_ref = ref_down.GetReference()
+                    hit_el = get_ceiling_element_from_ref(doc, hit_ref)
+                    thickness = get_element_thickness(hit_el)
+                    target_pt = XYZ(target_pt.X, target_pt.Y, target_pt.Z - thickness)
+                except Exception:
+                    # Fallback to top face if error
+                    pass
             
             if not target_pt: continue
 

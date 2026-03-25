@@ -70,6 +70,20 @@ class IdlingEventArgs(RevitAPIPreEventArgs):
     def SetRaiseWithoutDelay(self) -> None: ...
 
 
+class MacroUpdatedEventArgs(RevitAPISingleEventArgs):
+
+
+class SelectionChangedEventArgs(RevitAPISingleEventArgs):
+    def GetReferences(self) -> List[Reference]: ...
+    def GetSelectedElements(self) -> ISet: ...
+    def GetDocument(self) -> Document: ...
+
+
+class ThemeChangedEventArgs(RevitAPISingleEventArgs):
+    @property
+    def ThemeChangedType(self) -> ThemeType: ...
+
+
 class TransferringProjectStandardsEventArgs(RevitAPIPreDocEventArgs):
     @property
     def SourceDocument(self) -> Document: ...

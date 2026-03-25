@@ -3,3 +3,4 @@ title: Modify
 layout:
   - ArrayOnPath
   - LightsToCeiling
+  - EqualDist

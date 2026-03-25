@@ -37,6 +37,10 @@ class InvalidPathArgumentException(ArgumentException):
     def GetObjectData(self, info: SerializationInfo, context: StreamingContext) -> None: ...
 
 
+class DirectoryNotEmptyException(ArgumentException):
+    def GetObjectData(self, info: SerializationInfo, context: StreamingContext) -> None: ...
+
+
 class FileArgumentNotFoundException(ArgumentException):
     def GetObjectData(self, info: SerializationInfo, context: StreamingContext) -> None: ...
 
@@ -224,4 +228,32 @@ class TransientElementCreationException(InvalidOperationException):
 
 
 class BackgroundTaskCancelledException(ApplicationException):
+    def GetObjectData(self, info: SerializationInfo, context: StreamingContext) -> None: ...
+
+
+class NetworkCommunicationException(ApplicationException):
+    def GetObjectData(self, info: SerializationInfo, context: StreamingContext) -> None: ...
+
+
+class ServerInternalException(ApplicationException):
+    def GetObjectData(self, info: SerializationInfo, context: StreamingContext) -> None: ...
+
+
+class ResourceNotFoundException(ApplicationException):
+    def GetObjectData(self, info: SerializationInfo, context: StreamingContext) -> None: ...
+
+
+class UnauthenticatedException(ApplicationException):
+    def GetObjectData(self, info: SerializationInfo, context: StreamingContext) -> None: ...
+
+
+class AccessDeniedException(ApplicationException):
+    def GetObjectData(self, info: SerializationInfo, context: StreamingContext) -> None: ...
+
+
+class DefaultValueException(InvalidOperationException):
+    def GetObjectData(self, info: SerializationInfo, context: StreamingContext) -> None: ...
+
+
+class SchemaException(InvalidOperationException):
     def GetObjectData(self, info: SerializationInfo, context: StreamingContext) -> None: ...
