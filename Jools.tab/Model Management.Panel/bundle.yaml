@@ -7,5 +7,4 @@ layout:
   - ExportParameters
   - SaveToACC
   - RelinkToCloud
-  - CopyFilters
-  - CopyTemplateFilters
+  - ViewTemplates

@@ -147,58 +147,79 @@ def clone_overrides(source_overrides, source_doc, target_doc):
     """Deep clones OverrideGraphicSettings by mapping referenced patterns by name."""
     new_overrides = DB.OverrideGraphicSettings()
     
-    # 1. Line Patterns
-    for prop in ["ProjectionLinePatternId", "CutLinePatternId"]:
-        src_id = getattr(source_overrides, prop)
-        if src_id != DB.ElementId.InvalidElementId:
-            src_pat = source_doc.GetElement(src_id)
-            if src_pat:
-                tar_pat = get_element_by_name(target_doc, DB.LinePatternElement, src_pat.Name)
-                if tar_pat:
-                    setter = getattr(new_overrides, "Set" + prop)
-                    setter(tar_pat.Id)
-
-    # 2. Fill Patterns (Handles Foreground/Background for newer Revit versions)
-    fill_props = [
-        "ProjectionFillPatternId", "CutFillPatternId",
-        "ProjectionBackgroundFillPatternId", "CutBackgroundFillPatternId"
+    # Mapping table: (Property Name, Setter Method, Element Class or None)
+    # Using a list of tuples to handle the different Revit API versions/names
+    mapping = [
+        # Halftone & Detail
+        ("Halftone", "SetHalftone", None),
+        ("DetailLevel", "SetDetailLevel", None),
+        
+        # Transparency (Property is Transparency, Setter is SetSurfaceTransparency)
+        ("Transparency", "SetSurfaceTransparency", None),
+        
+        # Lines
+        ("ProjectionLineWeight", "SetProjectionLineWeight", None),
+        ("ProjectionLineColor", "SetProjectionLineColor", None),
+        ("ProjectionLinePatternId", "SetProjectionLinePatternId", DB.LinePatternElement),
+        
+        ("CutLineWeight", "SetCutLineWeight", None),
+        ("CutLineColor", "SetCutLineColor", None),
+        ("CutLinePatternId", "SetCutLinePatternId", DB.LinePatternElement),
+        
+        # Patterns (Revit 2019+ style)
+        ("SurfaceForegroundPatternId", "SetSurfaceForegroundPatternId", DB.FillPatternElement),
+        ("SurfaceForegroundPatternColor", "SetSurfaceForegroundPatternColor", None),
+        ("IsSurfaceForegroundPatternVisible", "SetSurfaceForegroundPatternVisible", None),
+        
+        ("SurfaceBackgroundPatternId", "SetSurfaceBackgroundPatternId", DB.FillPatternElement),
+        ("SurfaceBackgroundPatternColor", "SetSurfaceBackgroundPatternColor", None),
+        ("IsSurfaceBackgroundPatternVisible", "SetSurfaceBackgroundPatternVisible", None),
+        
+        ("CutForegroundPatternId", "SetCutForegroundPatternId", DB.FillPatternElement),
+        ("CutForegroundPatternColor", "SetCutForegroundPatternColor", None),
+        ("IsCutForegroundPatternVisible", "SetCutForegroundPatternVisible", None),
+        
+        ("CutBackgroundPatternId", "SetCutBackgroundPatternId", DB.FillPatternElement),
+        ("CutBackgroundPatternColor", "SetCutBackgroundPatternColor", None),
+        ("IsCutBackgroundPatternVisible", "SetCutBackgroundPatternVisible", None),
+        
+        # Legacy Patterns (Pre-2019)
+        ("ProjectionFillPatternId", "SetProjectionFillPatternId", DB.FillPatternElement),
+        ("ProjectionFillColor", "SetProjectionFillColor", None),
+        ("ProjectionFillPatternVisible", "SetProjectionFillPatternVisible", None),
+        
+        ("CutFillPatternId", "SetCutFillPatternId", DB.FillPatternElement),
+        ("CutFillColor", "SetCutFillColor", None),
+        ("CutFillPatternVisible", "SetCutFillPatternVisible", None),
     ]
-    for prop in fill_props:
-        if hasattr(source_overrides, prop): # Background props only exist in Revit 2019+
-            src_id = getattr(source_overrides, prop)
-            if src_id != DB.ElementId.InvalidElementId:
-                src_pat = source_doc.GetElement(src_id)
-                if src_pat:
-                    tar_pat = get_element_by_name(target_doc, DB.FillPatternElement, src_pat.Name)
-                    if tar_pat:
-                        setter = getattr(new_overrides, "Set" + prop)
-                        setter(tar_pat.Id)
 
-    # 3. Colors
-    color_props = [
-        "ProjectionLineColor", "CutLineColor", 
-        "ProjectionFillColor", "CutFillColor",
-        "ProjectionBackgroundFillColor", "CutBackgroundFillColor"
-    ]
-    for prop in color_props:
-        if hasattr(source_overrides, prop):
-            color = getattr(source_overrides, prop)
-            if color.IsValid:
-                setter = getattr(new_overrides, "Set" + prop)
-                setter(color)
-
-    # 4. Numeric Values / Booleans
-    simple_props = [
-        "ProjectionLineWeight", "CutLineWeight", "Transparency", 
-        "Halftone", "DetailLevel", 
-        "ProjectionFillPatternVisible", "CutFillPatternVisible",
-        "ProjectionBackgroundFillPatternVisible", "CutBackgroundFillPatternVisible"
-    ]
-    for prop in simple_props:
-        if hasattr(source_overrides, prop):
-            val = getattr(source_overrides, prop)
-            setter = getattr(new_overrides, "Set" + prop)
-            setter(val)
+    for prop_name, setter_name, element_class in mapping:
+        # Check if source has the property and target has the setter
+        if hasattr(source_overrides, prop_name) and hasattr(new_overrides, setter_name):
+            val = getattr(source_overrides, prop_name)
+            setter = getattr(new_overrides, setter_name)
+            
+            # Special handling for IDs (Patterns)
+            if element_class and isinstance(val, DB.ElementId):
+                if val != DB.ElementId.InvalidElementId:
+                    src_el = source_doc.GetElement(val)
+                    if src_el:
+                        tar_el = get_element_by_name(target_doc, element_class, src_el.Name)
+                        if tar_el:
+                            setter(tar_el.Id)
+            # Special handling for Colors
+            elif isinstance(val, DB.Color):
+                if val.IsValid:
+                    setter(val)
+            # Simple values (int, bool, etc.)
+            else:
+                # For some reason, invalid weights/detail levels can cause issues
+                if prop_name == "ProjectionLineWeight" or prop_name == "CutLineWeight":
+                    if val > 0: setter(val)
+                elif prop_name == "DetailLevel":
+                    if val != DB.ViewDetailLevel.Undefined: setter(val)
+                else:
+                    setter(val)
 
     return new_overrides
 
@@ -231,7 +252,9 @@ def main():
         # Ensure filter exists in target
         target_filter = get_or_copy_filter(sf, doc)
         if target_filter:
-            filter_data.append((target_filter, overrides, visibility))
+            # Map the overrides to the target document
+            tar_overrides = clone_overrides(overrides, src_doc, doc)
+            filter_data.append((target_filter, tar_overrides, visibility))
         else:
             logger.warning("Could not copy/find filter: {}".format(sf.Name))
 
