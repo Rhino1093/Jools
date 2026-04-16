@@ -240,28 +240,29 @@ def main():
     src_template = ui.selected_source_template
     target_templates = ui.selected_target_templates
     
-    # 2. Extract filter data from source template
-    src_filter_ids = src_template.GetFilters()
-    filter_data = [] # List of tuples: (TargetFilter, Overrides, Visibility)
-    
-    for sfid in src_filter_ids:
-        sf = src_doc.GetElement(sfid)
-        overrides = src_template.GetFilterOverrides(sfid)
-        visibility = src_template.GetFilterVisibility(sfid)
-        
-        # Ensure filter exists in target
-        target_filter = get_or_copy_filter(sf, doc)
-        if target_filter:
-            # Map the overrides to the target document
-            tar_overrides = clone_overrides(overrides, src_doc, doc)
-            filter_data.append((target_filter, tar_overrides, visibility))
-        else:
-            logger.warning("Could not copy/find filter: {}".format(sf.Name))
-
-    # 3. Apply to target templates
+    # 2. Start Transaction to handle both copying filters and applying overrides
     t = DB.Transaction(doc, "Copy View Template Filters")
     t.Start()
     try:
+        # 3. Extract filter data from source template
+        src_filter_ids = src_template.GetFilters()
+        filter_data = [] # List of tuples: (TargetFilter, Overrides, Visibility)
+        
+        for sfid in src_filter_ids:
+            sf = src_doc.GetElement(sfid)
+            overrides = src_template.GetFilterOverrides(sfid)
+            visibility = src_template.GetFilterVisibility(sfid)
+            
+            # Ensure filter exists in target (This might modify doc via CopyElements)
+            target_filter = get_or_copy_filter(sf, doc)
+            if target_filter:
+                # Map the overrides to the target document
+                tar_overrides = clone_overrides(overrides, src_doc, doc)
+                filter_data.append((target_filter, tar_overrides, visibility))
+            else:
+                logger.warning("Could not copy/find filter: {}".format(sf.Name))
+
+        # 4. Apply to target templates
         for target_template in target_templates:
             # Wipe existing filters (Replace mode)
             existing_filters = target_template.GetFilters()

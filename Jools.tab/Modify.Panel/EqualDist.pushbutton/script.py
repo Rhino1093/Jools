@@ -1,22 +1,26 @@
 #! python3
-# coding: utf-8
-from __future__ import division
-
 import clr
-import math
+import sys
 
+# Load Revit API before pyrevit to avoid interface instantiation errors in CPython
 clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
+
+from pyrevit import revit, script
+
+import math
+
+# .NET / WPF Imports
 clr.AddReference("PresentationFramework")
 clr.AddReference("PresentationCore")
 clr.AddReference("WindowsBase")
 clr.AddReference("System.Xaml")
 
-from Autodesk.Revit import DB, UI
-from Autodesk.Revit.Exceptions import OperationCanceledException
-from pyrevit import revit, script
-from System.Windows import Window, WindowStartupLocation, Thickness, WindowStyle
-from System.Windows.Controls import StackPanel, Label, TextBox, Button
+from Autodesk.Revit import DB # type: ignore
+from Autodesk.Revit import UI # type: ignore
+from Autodesk.Revit.Exceptions import OperationCanceledException # type: ignore
+from System.Windows import Window, WindowStartupLocation, Thickness, WindowStyle # type: ignore
+from System.Windows.Controls import StackPanel, Label, TextBox, Button # type: ignore
 
 __author__ = "Ryan Johnston"
 __date__ = "2026-02-16"
@@ -24,6 +28,8 @@ __purpose__ = "Equally distribute detail lines (CPython Compatible)."
 
 doc = revit.doc
 uidoc = revit.uidoc
+output = script.get_output()
+logger = script.get_logger()
 
 def get_input(title, label_text, default_val):
     """Simple WPF input window without inheritance to avoid CPython init issues."""
@@ -153,69 +159,65 @@ def main():
             return
 
     # EXECUTE (Inside Transaction)
-    t = DB.Transaction(doc, "Equal Dist")
-    t.Start()
     try:
-        if mode == "DISTRIBUTE":
-            direction = get_line_direction(detail_lines[0])
-            sorted_lines = sort_parallel_lines(detail_lines, direction)
-            first_pt = sorted_lines[0].GeometryCurve.GetEndPoint(0)
-            last_pt = sorted_lines[-1].GeometryCurve.GetEndPoint(0)
-            perp = DB.XYZ(direction.Y, -direction.X, 0).Normalize()
-            total_dist = (last_pt - first_pt).DotProduct(perp)
-            spacing = total_dist / (len(sorted_lines) - 1)
-            
-            for i, line in enumerate(sorted_lines[1:-1], 1):
-                curr_pt = line.GeometryCurve.GetEndPoint(0)
-                target_dist = i * spacing
-                current_dist = (curr_pt - first_pt).DotProduct(perp)
-                move_vec = perp * (target_dist - current_dist)
-                DB.ElementTransformUtils.MoveElement(doc, line.Id, move_vec)
+        with revit.Transaction("Equal Dist"):
+            if mode == "DISTRIBUTE":
+                direction = get_line_direction(detail_lines[0])
+                sorted_lines = sort_parallel_lines(detail_lines, direction)
+                first_pt = sorted_lines[0].GeometryCurve.GetEndPoint(0)
+                last_pt = sorted_lines[-1].GeometryCurve.GetEndPoint(0)
+                perp = DB.XYZ(direction.Y, -direction.X, 0).Normalize()
+                total_dist = (last_pt - first_pt).DotProduct(perp)
+                spacing = total_dist / (len(sorted_lines) - 1)
+                
+                for i, line in enumerate(sorted_lines[1:-1], 1):
+                    curr_pt = line.GeometryCurve.GetEndPoint(0)
+                    target_dist = i * spacing
+                    current_dist = (curr_pt - first_pt).DotProduct(perp)
+                    move_vec = perp * (target_dist - current_dist)
+                    DB.ElementTransformUtils.MoveElement(doc, line.Id, move_vec)
 
-        elif mode == "ADD_BETWEEN":
-            num_to_add = params['num_to_add']
-            direction = get_line_direction(detail_lines[0])
-            sorted_lines = sort_parallel_lines(detail_lines, direction)
-            first_line, last_line = sorted_lines[0], sorted_lines[1]
-            perp = DB.XYZ(direction.Y, -direction.X, 0).Normalize()
-            dist_vec = last_line.GeometryCurve.GetEndPoint(0) - first_line.GeometryCurve.GetEndPoint(0)
-            total_perp_dist = dist_vec.DotProduct(perp)
-            line_style = first_line.LineStyle
-            spacing = total_perp_dist / (num_to_add + 1)
-            
-            for i in range(1, num_to_add + 1):
-                move_vec = perp * (i * spacing)
-                new_curve = first_line.GeometryCurve.CreateTransformed(DB.Transform.CreateTranslation(move_vec))
-                new_line = doc.Create.NewDetailCurve(active_view, new_curve)
-                new_line.LineStyle = line_style
+            elif mode == "ADD_BETWEEN":
+                num_to_add = params['num_to_add']
+                direction = get_line_direction(detail_lines[0])
+                sorted_lines = sort_parallel_lines(detail_lines, direction)
+                first_line, last_line = sorted_lines[0], sorted_lines[1]
+                perp = DB.XYZ(direction.Y, -direction.X, 0).Normalize()
+                dist_vec = last_line.GeometryCurve.GetEndPoint(0) - first_line.GeometryCurve.GetEndPoint(0)
+                total_perp_dist = dist_vec.DotProduct(perp)
+                line_style = first_line.LineStyle
+                spacing = total_perp_dist / (num_to_add + 1)
+                
+                for i in range(1, num_to_add + 1):
+                    move_vec = perp * (i * spacing)
+                    new_curve = first_line.GeometryCurve.CreateTransformed(DB.Transform.CreateTranslation(move_vec))
+                    new_line = doc.Create.NewDetailCurve(active_view, new_curve)
+                    new_line.LineStyle = line_style
 
-        elif mode == "CREATE_NEW":
-            pt_start, pt_end = params['pt_start'], params['pt_end']
-            total_count = params['total_count']
-            vec = pt_end - pt_start
-            dist = vec.GetLength()
-            direction = vec.Normalize()
-            line_dir = DB.XYZ(-direction.Y, direction.X, 0).Normalize()
-            
-            line_style = None
-            if detail_lines:
-                line_style = detail_lines[0].LineStyle
-            else:
-                line_style = get_hidden_line_style()
-            
-            spacing = dist / (total_count - 1)
-            half_len = 2.0
-            
-            for i in range(total_count):
-                base_pt = pt_start + (direction * (i * spacing))
-                p1, p2 = base_pt + (line_dir * half_len), base_pt - (line_dir * half_len)
-                new_line = doc.Create.NewDetailCurve(active_view, DB.Line.CreateBound(p1, p2))
-                if line_style: new_line.LineStyle = line_style
+            elif mode == "CREATE_NEW":
+                pt_start, pt_end = params['pt_start'], params['pt_end']
+                total_count = params['total_count']
+                vec = pt_end - pt_start
+                dist = vec.GetLength()
+                direction = vec.Normalize()
+                line_dir = DB.XYZ(-direction.Y, direction.X, 0).Normalize()
+                
+                line_style = None
+                if detail_lines:
+                    line_style = detail_lines[0].LineStyle
+                else:
+                    line_style = get_hidden_line_style()
+                
+                spacing = dist / (total_count - 1)
+                half_len = 2.0
+                
+                for i in range(total_count):
+                    base_pt = pt_start + (direction * (i * spacing))
+                    p1, p2 = base_pt + (line_dir * half_len), base_pt - (line_dir * half_len)
+                    new_line = doc.Create.NewDetailCurve(active_view, DB.Line.CreateBound(p1, p2))
+                    if line_style: new_line.LineStyle = line_style
 
-        t.Commit()
     except Exception as e:
-        if t.GetStatus() == DB.TransactionStatus.Started:
-            t.RollBack()
         alert("An error occurred: {}".format(str(e)))
 
 if __name__ == "__main__":
