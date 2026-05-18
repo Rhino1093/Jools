@@ -1,5 +1,0 @@
-title: "View\nTemplates"
-
-layout:
-  - CopyTemplateFilters
-  - CopyFilters

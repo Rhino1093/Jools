@@ -1,3 +1,20 @@
-/typings/*
-/ironpython-stubs/*
+# dependencies & stubs
+/typings/
 *.pyi
+
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+
+# ide configurations
+.vscode/
+
+# secrets & logs
+.env
+*.log
+
+# os files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,6 @@
+title: "View\nTemplates"
+
+layout:
+  - CopyViewTemplatesFromOtherProjects
+  - CopyFiltersBetweenTemplates
+  - CopyFilters

@@ -1,0 +1,13 @@
+title: BIM Management
+layout:
+  - BulkLinks
+  - BulkRVTUpgrade
+  - BulkExportNWCFiles
+  - SaveToACC
+  - RelinkToCloud
+  - -----
+  - CleanCADFiles
+  - RunHealthCheck
+  - Switch
+  - -----
+  - ExportParameters

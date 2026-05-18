@@ -1,6 +1,0 @@
-title: "Model\nHealth"
-
-layout:
-  - RunHealthCheck
-  - Switch
-  - CleanCADFiles
