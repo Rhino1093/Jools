@@ -152,7 +152,9 @@ def get_or_copy_filter(source_filter, target_doc):
     ids.Add(source_filter.Id)
     copied_ids = DB.ElementTransformUtils.CopyElements(source_filter.Document, ids, target_doc, None, DB.CopyPasteOptions())
     if copied_ids:
-        return target_doc.GetElement(copied_ids[0])
+        copied_list = list(copied_ids)
+        if copied_list:
+            return target_doc.GetElement(copied_list[0])
     return None
 
 def get_element_by_name(doc, class_type, name):

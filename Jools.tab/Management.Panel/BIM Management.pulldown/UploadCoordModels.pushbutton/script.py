@@ -32,12 +32,12 @@ logger = script.get_logger()
 output = script.get_output()
 
 # Settings file path in User Profile's AppData
-SETTINGS_FILE = os.path.join(os.environ["APPDATA"], "pyRevit", "PDI_NWC_Only_Settings.json")
+SETTINGS_FILE = os.path.join(os.environ["APPDATA"], "pyRevit", "PDI_Startup_Settings.json")
 
 XAML_STR = """<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Batch Export NWC Files" 
-        Height="520" Width="530"
+        Title="PDI Project Startup - Setup &amp; Export" 
+        Height="600" Width="530"
         WindowStartupLocation="CenterScreen" 
         Background="#1E1E1E" Foreground="#FFFFFF"
         ResizeMode="NoResize" FontFamily="Segoe UI">
@@ -50,8 +50,8 @@ XAML_STR = """<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presen
 
         <!-- Header -->
         <StackPanel Grid.Row="0" Margin="0,0,0,15">
-            <TextBlock Text="Batch Export NWC Files" FontSize="18" FontWeight="Bold" Foreground="#3A96DD"/>
-            <TextBlock Text="Configure coordination views, and batch export Navisworks NWC files without saving." FontSize="11" Foreground="#888888" Margin="0,2,0,0"/>
+            <TextBlock Text="PDI Project Startup" FontSize="18" FontWeight="Bold" Foreground="#3A96DD"/>
+            <TextBlock Text="Configure coordination views, save backgrounds, and export Navisworks NWC files." FontSize="11" Foreground="#888888" Margin="0,2,0,0"/>
             <Separator Background="#333333" Margin="0,8,0,0"/>
         </StackPanel>
 
@@ -69,32 +69,52 @@ XAML_STR = """<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presen
                     <Button Name="btnBrowseSource" Content="Browse..." Grid.Column="1" Margin="5,0,0,0" Height="24" Background="#3E3E42" Foreground="#FFFFFF" BorderBrush="#3F3F46"/>
                 </Grid>
 
-                <!-- Destination NWC Folder -->
-                <TextBlock Text="Destination NWC Folder:" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,4"/>
-                <Grid Margin="0,0,0,10">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="80"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBox Name="txtDestNwcPath" Grid.Column="0" Height="24" Background="#2D2D2D" Foreground="#FFFFFF" BorderBrush="#3F3F46" Padding="3,1" VerticalContentAlignment="Center"/>
-                    <Button Name="btnBrowseDestNwc" Content="Browse..." Grid.Column="1" Margin="5,0,0,0" Height="24" Background="#3E3E42" Foreground="#FFFFFF" BorderBrush="#3F3F46"/>
-                </Grid>
+                <!-- Processing Run Modes -->
+                <TextBlock Text="Run Actions:" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,4"/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <CheckBox Name="chkProcessRvt" Content="Save Revit Backgrounds" Foreground="#FFFFFF" IsChecked="True" VerticalContentAlignment="Center" Margin="0,0,20,0"/>
+                    <CheckBox Name="chkProcessNwc" Content="Export NWC Files" Foreground="#FFFFFF" IsChecked="True" VerticalContentAlignment="Center"/>
+                </StackPanel>
 
-                <!-- Target View Name & Checkboxes -->
-                <Grid Margin="0,0,0,10">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="220"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0" Margin="0,0,10,0">
-                        <TextBlock Text="Target View Name:" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,4"/>
-                        <TextBox Name="txtViewName" Height="24" Text="PDI Coordination" Background="#2D2D2D" Foreground="#FFFFFF" BorderBrush="#3F3F46" Padding="3,1" VerticalContentAlignment="Center"/>
+                <!-- Destination RVT Folder -->
+                <StackPanel Name="pnlDestRvt" Margin="0,0,0,10">
+                    <TextBlock Text="Destination Autodesk Docs Folder (RVT):" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,4"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="80"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Name="txtDestRvtPath" Grid.Column="0" Height="24" Background="#2D2D2D" Foreground="#FFFFFF" BorderBrush="#3F3F46" Padding="3,1" VerticalContentAlignment="Center"/>
+                        <Button Name="btnBrowseDestRvt" Content="Browse..." Grid.Column="1" Margin="5,0,0,0" Height="24" Background="#3E3E42" Foreground="#FFFFFF" BorderBrush="#3F3F46"/>
+                    </Grid>
+                </StackPanel>
+
+                <!-- Destination NWC Folder -->
+                <StackPanel Name="pnlDestNwc" Margin="0,0,0,10">
+                    <TextBlock Text="Destination NWC Folder:" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,4"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="80"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Name="txtDestNwcPath" Grid.Column="0" Height="24" Background="#2D2D2D" Foreground="#FFFFFF" BorderBrush="#3F3F46" Padding="3,1" VerticalContentAlignment="Center"/>
+                        <Button Name="btnBrowseDestNwc" Content="Browse..." Grid.Column="1" Margin="5,0,0,0" Height="24" Background="#3E3E42" Foreground="#FFFFFF" BorderBrush="#3F3F46"/>
+                    </Grid>
+                </StackPanel>
+
+                <!-- Cloud Option Checkbox -->
+                <CheckBox Name="chkSaveAsCloud" Content="Upload RVT as true Revit Cloud Model (via API)" Foreground="#FFFFFF" Margin="0,0,0,10" VerticalContentAlignment="Center"/>
+
+                <!-- Cloud Settings Panel -->
+                <Border Name="brdCloudSettings" BorderThickness="1" BorderBrush="#333333" Background="#252526" Padding="10" CornerRadius="3" Visibility="Collapsed" Margin="0,0,0,10">
+                    <StackPanel>
+                        <TextBlock Text="ACC Account ID (GUID):" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,4"/>
+                        <TextBox Name="txtAccountId" Height="24" Background="#2D2D2D" Foreground="#FFFFFF" BorderBrush="#3F3F46" Padding="3,1" VerticalContentAlignment="Center" Margin="0,0,0,8"/>
+
+                        <TextBlock Text="ACC Project / Folder URL:" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,4"/>
+                        <TextBox Name="txtAccUrl" Height="24" Background="#2D2D2D" Foreground="#FFFFFF" BorderBrush="#3F3F46" Padding="3,1" VerticalContentAlignment="Center"/>
                     </StackPanel>
-                    <StackPanel Grid.Column="1" VerticalAlignment="Bottom">
-                        <CheckBox Name="chkRecursive" Content="Search Subdirectories" Foreground="#FFFFFF" IsChecked="False" Margin="0,0,0,4" FontSize="11"/>
-                        <CheckBox Name="chkDryRun" Content="Dry Run (log only, no export)" Foreground="#E81123" FontWeight="Bold" IsChecked="False" FontSize="11"/>
-                    </StackPanel>
-                </Grid>
+                </Border>
 
                 <!-- NWC Settings Expander -->
                 <Expander Name="expNwcSettings" Header="Navisworks NWC Export Options" Foreground="#FFFFFF" Margin="0,0,0,5" IsExpanded="False">
@@ -127,7 +147,7 @@ XAML_STR = """<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presen
         <!-- Actions -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Name="btnCancel" Content="Cancel" Width="80" Height="26" Background="#3E3E42" Foreground="#FFFFFF" BorderBrush="#3F3F46"/>
-            <Button Name="btnStart" Content="Run Export" Width="100" Height="26" Margin="10,0,0,0" Background="#0E639C" Foreground="#FFFFFF" BorderBrush="#3F3F46" FontWeight="SemiBold"/>
+            <Button Name="btnStart" Content="Run Startup" Width="100" Height="26" Margin="10,0,0,0" Background="#0E639C" Foreground="#FFFFFF" BorderBrush="#3F3F46" FontWeight="SemiBold"/>
         </StackPanel>
     </Grid>
 </Window>
@@ -163,10 +183,18 @@ class StartupWindow(object):
         
         # Get UI controls
         self.txt_source = self.window.FindName("txtSourcePath")
+        self.txt_dest_rvt = self.window.FindName("txtDestRvtPath")
         self.txt_dest_nwc = self.window.FindName("txtDestNwcPath")
-        self.txt_view_name = self.window.FindName("txtViewName")
-        self.chk_recursive = self.window.FindName("chkRecursive")
-        self.chk_dry_run = self.window.FindName("chkDryRun")
+        
+        self.chk_process_rvt = self.window.FindName("chkProcessRvt")
+        self.chk_process_nwc = self.window.FindName("chkProcessNwc")
+        self.chk_cloud = self.window.FindName("chkSaveAsCloud")
+        self.brd_cloud = self.window.FindName("brdCloudSettings")
+        self.txt_account = self.window.FindName("txtAccountId")
+        self.txt_url = self.window.FindName("txtAccUrl")
+        
+        self.pnl_dest_rvt = self.window.FindName("pnlDestRvt")
+        self.pnl_dest_nwc = self.window.FindName("pnlDestNwc")
         
         self.exp_nwc_settings = self.window.FindName("expNwcSettings")
         self.cmb_nwc_coords = self.window.FindName("cmbNwcCoordinates")
@@ -179,13 +207,22 @@ class StartupWindow(object):
         self.chk_nwc_lights = self.window.FindName("chkNwcConvertLights")
         
         self.btn_browse_source = self.window.FindName("btnBrowseSource")
+        self.btn_browse_dest_rvt = self.window.FindName("btnBrowseDestRvt")
         self.btn_browse_dest_nwc = self.window.FindName("btnBrowseDestNwc")
         self.btn_start = self.window.FindName("btnStart")
         self.btn_cancel = self.window.FindName("btnCancel")
         
         # Register Event Handlers
         self.btn_browse_source.Click += self.on_browse_source
+        self.btn_browse_dest_rvt.Click += self.on_browse_dest_rvt
         self.btn_browse_dest_nwc.Click += self.on_browse_dest_nwc
+        self.chk_cloud.Checked += self.on_cloud_checked_changed
+        self.chk_cloud.Unchecked += self.on_cloud_checked_changed
+        
+        self.chk_process_rvt.Checked += self.on_process_rvt_changed
+        self.chk_process_rvt.Unchecked += self.on_process_rvt_changed
+        self.chk_process_nwc.Checked += self.on_process_nwc_changed
+        self.chk_process_nwc.Unchecked += self.on_process_nwc_changed
         
         self.btn_start.Click += self.on_start
         self.btn_cancel.Click += self.on_cancel
@@ -193,10 +230,15 @@ class StartupWindow(object):
         # Load saved settings
         self.settings = load_settings()
         self.txt_source.Text = self.settings.get("source_path", "")
+        self.txt_dest_rvt.Text = self.settings.get("dest_rvt_path", self.settings.get("dest_path", ""))
         self.txt_dest_nwc.Text = self.settings.get("dest_nwc_path", "")
-        self.txt_view_name.Text = self.settings.get("view_name", "PDI Coordination")
-        self.chk_recursive.IsChecked = self.settings.get("recursive_search", False)
-        self.chk_dry_run.IsChecked = self.settings.get("dry_run", False)
+        
+        self.chk_process_rvt.IsChecked = self.settings.get("process_rvt", True)
+        self.chk_process_nwc.IsChecked = self.settings.get("process_nwc", True)
+        self.chk_cloud.IsChecked = self.settings.get("save_as_cloud", False)
+        
+        self.txt_account.Text = self.settings.get("account_id", "")
+        self.txt_url.Text = self.settings.get("acc_url", "")
         
         # Load NWC Options
         self.chk_nwc_parts.IsChecked = self.settings.get("nwc_export_parts", True)
@@ -210,15 +252,59 @@ class StartupWindow(object):
         nwc_coords = self.settings.get("nwc_coordinates", "Shared")
         self.cmb_nwc_coords.SelectedIndex = 1 if nwc_coords == "ProjectInternal" else 0
         
+        self.update_rvt_visibility()
+        self.update_nwc_visibility()
         self.is_running = False
+
+    def update_cloud_visibility(self):
+        """Toggles visibility of the Cloud Settings panel based on the checkbox state."""
+        if self.chk_cloud.IsChecked:
+            self.brd_cloud.Visibility = Visibility.Visible
+        else:
+            self.brd_cloud.Visibility = Visibility.Collapsed
+
+    def on_cloud_checked_changed(self, sender, args):
+        self.update_cloud_visibility()
+
+    def on_process_rvt_changed(self, sender, args):
+        self.update_rvt_visibility()
+
+    def on_process_nwc_changed(self, sender, args):
+        self.update_nwc_visibility()
+
+    def update_rvt_visibility(self):
+        if self.chk_process_rvt.IsChecked:
+            self.pnl_dest_rvt.Visibility = Visibility.Visible
+            self.chk_cloud.Visibility = Visibility.Visible
+            self.update_cloud_visibility()
+        else:
+            self.pnl_dest_rvt.Visibility = Visibility.Collapsed
+            self.chk_cloud.Visibility = Visibility.Collapsed
+            self.brd_cloud.Visibility = Visibility.Collapsed
+
+    def update_nwc_visibility(self):
+        if self.chk_process_nwc.IsChecked:
+            self.pnl_dest_nwc.Visibility = Visibility.Visible
+            self.exp_nwc_settings.Visibility = Visibility.Visible
+        else:
+            self.pnl_dest_nwc.Visibility = Visibility.Collapsed
+            self.exp_nwc_settings.Visibility = Visibility.Collapsed
 
     def on_browse_source(self, sender, args):
         dialog = FolderBrowserDialog()
-        dialog.Description = "Select Source Folder containing Revit Models"
+        dialog.Description = "Select Source Folder containing Local Models"
         if self.txt_source.Text and os.path.exists(self.txt_source.Text):
             dialog.SelectedPath = self.txt_source.Text
         if dialog.ShowDialog() == DialogResult.OK:
             self.txt_source.Text = dialog.SelectedPath
+
+    def on_browse_dest_rvt(self, sender, args):
+        dialog = FolderBrowserDialog()
+        dialog.Description = "Select Destination Autodesk Docs Folder (RVT)"
+        if self.txt_dest_rvt.Text and os.path.exists(self.txt_dest_rvt.Text):
+            dialog.SelectedPath = self.txt_dest_rvt.Text
+        if dialog.ShowDialog() == DialogResult.OK:
+            self.txt_dest_rvt.Text = dialog.SelectedPath
 
     def on_browse_dest_nwc(self, sender, args):
         dialog = FolderBrowserDialog()
@@ -234,27 +320,56 @@ class StartupWindow(object):
     def on_start(self, sender, args):
         # Validate Inputs
         source = self.txt_source.Text.strip()
+        dest_rvt = self.txt_dest_rvt.Text.strip()
         dest_nwc = self.txt_dest_nwc.Text.strip()
-        view_name = self.txt_view_name.Text.strip()
         
         if not source or not os.path.exists(source):
             forms.alert("Please select a valid source local folder.", title="Input Error")
             return
             
-        if not dest_nwc or not os.path.exists(dest_nwc):
-            forms.alert("Please select a valid destination NWC folder.", title="Input Error")
+        process_rvt = self.chk_process_rvt.IsChecked
+        process_nwc = self.chk_process_nwc.IsChecked
+        
+        if not process_rvt and not process_nwc:
+            forms.alert("Please select at least one action (Save RVT or Export NWC) to run.", title="Input Error")
             return
             
-        if not view_name:
-            forms.alert("Please enter a valid target view name.", title="Input Error")
-            return
-            
+        if process_rvt:
+            if self.chk_cloud.IsChecked:
+                account_id = self.txt_account.Text.strip()
+                acc_url = self.txt_url.Text.strip()
+                
+                if not account_id:
+                    forms.alert("Please enter a valid Account ID GUID.", title="Input Error")
+                    return
+                try:
+                    Guid(account_id)
+                except Exception:
+                    forms.alert("Account ID is not a valid GUID format.", title="Input Error")
+                    return
+                    
+                if not acc_url:
+                    forms.alert("Please enter a valid ACC URL.", title="Input Error")
+                    return
+            else:
+                if not dest_rvt or not os.path.exists(dest_rvt):
+                    forms.alert("Please select a valid destination RVT folder.", title="Input Error")
+                    return
+                    
+        if process_nwc:
+            if not dest_nwc or not os.path.exists(dest_nwc):
+                forms.alert("Please select a valid destination NWC folder.", title="Input Error")
+                return
+                
         # Save settings
         self.settings["source_path"] = source
+        self.settings["dest_rvt_path"] = dest_rvt
         self.settings["dest_nwc_path"] = dest_nwc
-        self.settings["view_name"] = view_name
-        self.settings["recursive_search"] = self.chk_recursive.IsChecked
-        self.settings["dry_run"] = self.chk_dry_run.IsChecked
+        self.settings["process_rvt"] = process_rvt
+        self.settings["process_nwc"] = process_nwc
+        self.settings["save_as_cloud"] = self.chk_cloud.IsChecked
+        self.settings["account_id"] = self.txt_account.Text.strip()
+        self.settings["acc_url"] = self.txt_url.Text.strip()
         
         self.settings["nwc_coordinates"] = "ProjectInternal" if self.cmb_nwc_coords.SelectedIndex == 1 else "Shared"
         self.settings["nwc_export_parts"] = self.chk_nwc_parts.IsChecked
@@ -269,6 +384,24 @@ class StartupWindow(object):
         
         self.is_running = True
         self.window.Close()
+
+def parse_acc_url(url):
+    """Extracts Project ID and Folder URN from ACC URL."""
+    try:
+        proj_match = re.search(r'projects/([a-f0-9\-]{36})', url)
+        folder_match = re.search(r'folderUrn=([^&]+)', url)
+        if not proj_match or not folder_match: return None, None
+        
+        project_id = proj_match.group(1)
+        try:
+            from urllib.parse import unquote
+        except ImportError:
+            from urllib import unquote
+        folder_urn = unquote(folder_match.group(1))
+        return project_id, folder_urn
+    except Exception as e:
+        logger.warning(f"Error parsing URL: {e}")
+        return None, None
 
 def setup_coordination_view(temp_doc, view_name):
     """Finds or creates a 3D coordination view, configures view properties/visibility overrides."""
@@ -401,11 +534,6 @@ def dismiss_dialog(sender, args):
             logger.warning("Could not auto-dismiss dialog box (ID: {}): {}".format(args.DialogId, ex))
 
 def main():
-    # Check if NWC Exporter is available
-    if not DB.OptionalFunctionalityUtils.IsNavisworksExporterAvailable():
-        forms.alert("Navisworks exporter utility is not available on this machine.", title="Error")
-        return
-
     # 1. Initialize and Display UI
     form = StartupWindow()
     form.window.ShowDialog()
@@ -416,50 +544,51 @@ def main():
 
     # 2. Extract settings from form
     source_folder = form.txt_source.Text.strip()
+    dest_rvt_folder = form.txt_dest_rvt.Text.strip()
     dest_nwc_folder = form.txt_dest_nwc.Text.strip()
-    view_name = form.txt_view_name.Text.strip()
-    recursive = form.chk_recursive.IsChecked
-    is_dry_run = form.chk_dry_run.IsChecked
+    process_rvt = form.chk_process_rvt.IsChecked
+    process_nwc = form.chk_process_nwc.IsChecked
+    save_as_cloud = form.chk_cloud.IsChecked
+    
+    account_guid_str = form.txt_account.Text.strip()
+    acc_url = form.txt_url.Text.strip()
+    
+    # Check if NWC Exporter is available if NWC export is requested
+    if process_nwc and not DB.OptionalFunctionalityUtils.IsNavisworksExporterAvailable():
+        forms.alert("Navisworks exporter utility is not installed on this machine. Cannot export NWC files.", title="Error")
+        return
 
     # 3. Gather local files
-    rvt_files = []
-    if recursive:
-        for root, _dirs, files in os.walk(source_folder):
-            for f in files:
-                if f.lower().endswith(".rvt"):
-                    rvt_files.append(os.path.join(root, f))
-    else:
-        for f in os.listdir(source_folder):
-            if f.lower().endswith(".rvt"):
-                rvt_files.append(os.path.join(source_folder, f))
-
-    if not rvt_files:
+    local_rvt_files = [f for f in os.listdir(source_folder) if f.lower().endswith('.rvt')]
+    if not local_rvt_files:
         forms.alert("No Revit models (.rvt) found in the selected source folder.")
         return
 
-    # Build NWC options object
-    nwc_options = DB.NavisworksExportOptions()
-    nwc_options.ExportScope = DB.NavisworksExportScope.View
+    view_name = "PDI Coordination"
     
-    # Coordinates
-    if form.cmb_nwc_coords.SelectedIndex == 1:
-        nwc_options.Coordinates = DB.NavisworksCoordinates.Internal
-    else:
-        nwc_options.Coordinates = DB.NavisworksCoordinates.Shared
+    # Build NWC options object
+    nwc_options = None
+    if process_nwc:
+        nwc_options = DB.NavisworksExportOptions()
+        nwc_options.ExportScope = DB.NavisworksExportScope.View
         
-    nwc_options.ExportParts = form.chk_nwc_parts.IsChecked
-    nwc_options.ExportLinks = form.chk_nwc_links.IsChecked
-    nwc_options.ExportElementIds = form.chk_nwc_ids.IsChecked
-    nwc_options.ExportRoomGeometry = form.chk_nwc_rooms.IsChecked
-    nwc_options.ConvertLinkedCADFormats = form.chk_nwc_cad.IsChecked
-    nwc_options.DivideFileIntoLevels = form.chk_nwc_levels.IsChecked
-    nwc_options.ConvertLights = form.chk_nwc_lights.IsChecked
-    nwc_options.ConvertElementProperties = True
+        # Coordinates
+        if form.cmb_nwc_coords.SelectedIndex == 1:
+            nwc_options.Coordinates = DB.NavisworksCoordinates.Internal
+        else:
+            nwc_options.Coordinates = DB.NavisworksCoordinates.Shared
+            
+        nwc_options.ExportParts = form.chk_nwc_parts.IsChecked
+        nwc_options.ExportLinks = form.chk_nwc_links.IsChecked
+        nwc_options.ExportElementIds = form.chk_nwc_ids.IsChecked
+        nwc_options.ExportRoomGeometry = form.chk_nwc_rooms.IsChecked
+        nwc_options.ConvertLinkedCADFormats = form.chk_nwc_cad.IsChecked
+        nwc_options.DivideFileIntoLevels = form.chk_nwc_levels.IsChecked
+        nwc_options.ConvertLights = form.chk_nwc_lights.IsChecked
+        nwc_options.ConvertElementProperties = True
 
-    output.print_md("# Batch Export NWC Files")
-    if is_dry_run:
-        output.print_md("### ⚠️ DRY RUN - log only, no NWC files will be written.")
-        
+    output.print_md("# Processing Models")
+    
     # Setup results container for summary reporting
     results = []
     
@@ -472,20 +601,19 @@ def main():
     logger.info("Enabled automatic dialog box suppression and failures/warnings preprocessor.")
     
     try:
-        total_files = len(rvt_files)
-        with forms.ProgressBar(title="Exporting NWC Files", cancellable=True) as pb:
-            for i, file_path in enumerate(rvt_files):
-                file_name = os.path.basename(file_path)
-                
+        total_files = len(local_rvt_files)
+        with forms.ProgressBar(title="Processing PDI Coordination Models", cancellable=True) as pb:
+            for i, file_name in enumerate(local_rvt_files):
                 # Check for cancellation
                 if pb.cancelled:
-                    logger.info("Export cancelled by user.")
-                    output.print_md("### ⚠️ Export Cancelled by User")
+                    logger.info("Processing cancelled by user.")
+                    output.print_md("### ⚠️ Processing Cancelled by User")
                     break
                     
                 # Update progress bar
                 pb.update_progress(i, total_files)
                 
+                full_path = os.path.join(source_folder, file_name)
                 output.print_md("---")
                 output.print_md("### Model: **{}**".format(file_name))
                 
@@ -499,34 +627,70 @@ def main():
                     options.DetachFromCentralOption = DB.DetachFromCentralOption.DetachAndPreserveWorksets
                     
                     logger.info("Opening detached model: {}".format(file_name))
-                    m_path = DB.ModelPathUtils.ConvertUserVisiblePathToModelPath(file_path)
+                    m_path = DB.ModelPathUtils.ConvertUserVisiblePathToModelPath(full_path)
                     temp_doc = app.OpenDocumentFile(m_path, options)
                     
                     if temp_doc:
-                        # Step A: Setup Coordination View
+                        # Step A: Setup PDI Coordination View
                         coord_view = setup_coordination_view(temp_doc, view_name)
                         
                         if not coord_view:
                             logger.warning("Coordination view was not created.")
                             
                         # Step B: Export NWC
-                        if coord_view:
-                            if is_dry_run:
-                                logger.info("[DRY RUN] Would export NWC for: {}".format(file_name))
-                                status = "Success"
-                                details = "Dry Run (no NWC written)"
+                        nwc_success = False
+                        if process_nwc and coord_view:
+                            nwc_success = export_nwc_file(temp_doc, coord_view, dest_nwc_folder, file_name, nwc_options)
+                        
+                        # Step C: Save RVT Background
+                        rvt_success = False
+                        if process_rvt:
+                            if save_as_cloud:
+                                logger.info("Uploading model to ACC cloud database...")
+                                project_id_str, folder_id = parse_acc_url(acc_url)
+                                if not project_id_str:
+                                    raise Exception("Could not parse Project ID/Folder URN from ACC URL.")
+                                
+                                account_guid = Guid(account_guid_str)
+                                project_guid = Guid(project_id_str)
+                                
+                                temp_doc.SaveAsCloudModel(account_guid, project_guid, folder_id, file_name)
+                                logger.info("Uploaded successfully as cloud model.")
+                                rvt_success = True
                             else:
-                                nwc_success = export_nwc_file(temp_doc, coord_view, dest_nwc_folder, file_name, nwc_options)
-                                if nwc_success:
-                                    status = "Success"
-                                    details = "NWC Exported"
-                                else:
-                                    status = "Failed"
-                                    details = "NWC Export Failed"
-                        else:
-                            details = "Coordination view not found/created"
+                                dest_path = os.path.join(dest_rvt_folder, file_name)
+                                logger.info("Saving model locally to Autodesk Docs path: {}".format(dest_path))
+                                
+                                save_opts = DB.SaveAsOptions()
+                                save_opts.OverwriteExistingFile = True
+                                
+                                if temp_doc.IsWorkshared:
+                                    ws_opts = DB.WorksharingSaveAsOptions()
+                                    ws_opts.SaveAsCentral = True
+                                    save_opts.SetWorksharingOptions(ws_opts)
+                                    logger.info("Model is workshared; saving as new Central file.")
+                                    
+                                temp_doc.SaveAs(dest_path, save_opts)
+                                logger.info("Saved successfully to destination folder.")
+                                rvt_success = True
+                                
+                        status = "Success"
+                        # Set details message based on actions
+                        action_details = []
+                        if process_rvt and rvt_success:
+                            action_details.append("RVT Saved")
+                        elif process_rvt:
+                            status = "Failed"
+                            action_details.append("RVT Save Failed")
                             
-                        temp_doc.Close(False) # Always close without saving
+                        if process_nwc and nwc_success:
+                            action_details.append("NWC Exported")
+                        elif process_nwc:
+                            status = "Failed"
+                            action_details.append("NWC Export Failed")
+                            
+                        details = ", ".join(action_details)
+                        temp_doc.Close(False)
                     else:
                         logger.error("Failed to open document file.")
                         details = "Could not open document background"
@@ -548,7 +712,7 @@ def main():
 
     # 4. Print Summary table
     output.print_md("---")
-    output.print_md("# Export Summary")
+    output.print_md("# Processing Summary")
     output.print_table(results, columns=["Model Name", "Status", "Details"])
 
 if __name__ == "__main__":

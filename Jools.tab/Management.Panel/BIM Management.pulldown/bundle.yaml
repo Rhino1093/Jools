@@ -4,10 +4,12 @@ layout:
   - BulkRVTUpgrade
   - BulkExportNWCFiles
   - SaveToACC
+  - UploadCoordModels
   - RelinkToCloud
   - -----
   - CleanCADFiles
   - RunHealthCheck
   - Switch
+  - ReportCoordinates
   - -----
   - ExportParameters

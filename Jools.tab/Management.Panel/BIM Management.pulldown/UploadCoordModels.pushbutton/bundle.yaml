@@ -1,0 +1,2 @@
+title: "PDI Startup"
+tooltip: "Prepares external Revit models for coordination.\n- Opens models detached (preserving worksets)\n- Configures PDI-Coordination 3D view and visibility settings\n- Registers PDI-Coordination in cloud publish settings\n- Saves models directly to Autodesk Docs or uploads to ACC"
