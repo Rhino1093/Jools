@@ -1,0 +1,2 @@
+title: "Model Diff"
+tooltip: "Reads a model diff CSV exported from ACC. Generates a new 3D view, isolating modified elements (yellow) and removed elements (red)."
