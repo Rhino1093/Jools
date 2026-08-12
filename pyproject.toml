@@ -1,0 +1,21 @@
+[tool.pylint.MASTER]
+ignored-modules = ["clr", "Autodesk", "System", "pyrevit"]
+
+[tool.pylint.'MESSAGES CONTROL']
+disable = [
+    "import-error",
+    "no-name-in-module", 
+    "no-member",
+    "invalid-name",
+    "bare-except"
+]
+
+[tool.pylint.TYPECHECK]
+generated-members = ["__revit__", "__builtin__", "__builtins__"]
+
+[tool.pyright]
+# For Pyright/Pylance users
+reportMissingImports = false
+reportMissingModuleSource = false
+reportGeneralTypeIssues = false
+extraPaths = ["."]

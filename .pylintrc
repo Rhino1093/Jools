@@ -1,0 +1,19 @@
+[MASTER]
+# Ignore pyRevit and .NET modules that pylint can't resolve
+ignored-modules=clr,Autodesk,System,pyrevit
+
+[MESSAGES CONTROL]
+# Disable specific warnings
+disable=
+    import-error,
+    no-name-in-module,
+    no-member,
+    invalid-name,
+    bare-except
+
+[TYPECHECK]
+# List of members which are set dynamically and missed by pylint
+generated-members=__revit__,__builtin__,__builtins__
+
+# Ignore the .NET event handler += syntax
+ignored-classes=optparse.Values,thread._local,_thread._local
