@@ -21,6 +21,19 @@ __purpose__ = "Array selected family instances along a picked path curve."
 
 uidoc = __revit__.ActiveUIDocument # type: ignore
 doc = uidoc.Document
+
+
+def eid_int(element_id):
+    """///Summary: An ElementId's integer value, valid in Revit 2022-2026.
+
+    Autodesk added ElementId.Value in 2024 and removed ElementId.IntegerValue
+    in 2026, so neither attribute alone covers every Revit this extension is
+    attached to. Written for both CPython 3 and IronPython 2.7.
+    """
+    value = getattr(element_id, "Value", None)
+    return int(value) if value is not None else element_id.IntegerValue
+
+
 output = script.get_output()
 logger = script.get_logger()
 
@@ -311,7 +324,7 @@ def _build_placements(seed, curve, options):
     length = curve.Length
     logger.info(
         "Building placements (seed id %s, mode %s, length %s)",
-        seed.Id.IntegerValue,
+        eid_int(seed.Id),
         options["mode"],
         length,
     )

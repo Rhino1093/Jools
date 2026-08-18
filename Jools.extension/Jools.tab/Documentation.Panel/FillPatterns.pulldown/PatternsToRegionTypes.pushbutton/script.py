@@ -1,4 +1,4 @@
-# !python3
+#! python3
 __author__ = "Ryan Johnston"
 __date__ = "2024-06-25"
 __purpose__ = "To create filled region types from fill patterns in the model"
@@ -6,17 +6,13 @@ __purpose__ = "To create filled region types from fill patterns in the model"
 
 import clr
 import re
-import os, sys, math, datetime, time, logging
-clr.AddReference('ProtoGeometry')
+import sys
 clr.AddReference('RevitAPI')
-clr.AddReference('RevitServices')
 clr.AddReference('System.Windows.Forms')
 clr.AddReference('System.Drawing')
 from Autodesk.DesignScript.Geometry import * # type: ignore
 from Autodesk.Revit.DB import *
 from Autodesk.Revit.UI import TaskDialog
-from RevitServices.Persistence import DocumentManager # type: ignore
-from RevitServices.Transactions import TransactionManager # type: ignore
 import System # type: ignore
 from System.Collections.Generic import List # type: ignore
 from System.Drawing import Size, Point, Font # type: ignore
@@ -24,6 +20,19 @@ from System.Windows.Forms import Form, Label, MessageBox, MessageBoxButtons, Mes
 
 # Get the current document
 doc = __revit__.ActiveUIDocument.Document # type: ignore
+
+
+def eid_int(element_id):
+    """///Summary: An ElementId's integer value, valid in Revit 2022-2026.
+
+    Autodesk added ElementId.Value in 2024 and removed ElementId.IntegerValue
+    in 2026, so neither attribute alone covers every Revit this extension is
+    attached to. Written for both CPython 3 and IronPython 2.7.
+    """
+    value = getattr(element_id, "Value", None)
+    return int(value) if value is not None else element_id.IntegerValue
+
+
 
 if doc is None:
     TaskDialog.Show("Error", "No active document found. Open a Revit file and try again")
@@ -46,7 +55,7 @@ def get_fill_pattern_elements(doc):
     fill_pattern_name_list = []
 
     for fpe in fill_pattern_elements:
-        fill_pattern_id = fpe.Id.IntegerValue
+        fill_pattern_id = eid_int(fpe.Id)
         fill_pattern_name = fpe.Name
         fill_pattern_type = fpe
 
@@ -72,7 +81,7 @@ def get_filled_region_types(doc, fill_pattern_dict):
 
     for frt in filled_region_types:
 
-        fg_fill_pattern_id   = frt.ForegroundPatternId.IntegerValue
+        fg_fill_pattern_id   = eid_int(frt.ForegroundPatternId)
         fg_fill_pattern_name = fill_pattern_dict.get(fg_fill_pattern_id, {}).get("name", None)
 
         if fg_fill_pattern_name is None:
@@ -81,7 +90,7 @@ def get_filled_region_types(doc, fill_pattern_dict):
 
         filled_region_dict[frt.Id] = {
             "name"                        : frt.get_Name(),
-            "id"                          : frt.Id.IntegerValue,
+            "id"                          : eid_int(frt.Id),
             "element"                     : frt,
             "foreground_fill_pattern_name": fg_fill_pattern_name,
             "foreground_fill_pattern_id"  : fg_fill_pattern_id,

@@ -269,10 +269,32 @@ def check_events_shim(path, text, engine, findings):
         )
 
 
+def _compat_helper_span(text):
+    """Character range of an eid_int() compat helper, if the file defines one.
+
+    A guarded `getattr(eid, "Value", None)` fallback to IntegerValue is the
+    sanctioned way to cover Revit 2022-2026 at once, because Value did not
+    exist before 2024 and IntegerValue was removed in 2026. The IntegerValue
+    inside that helper is correct, not a defect.
+    """
+    start = re.search(r"^def eid_int\s*\(", text, re.M)
+    if not start:
+        return None
+    # Scan from the start of the NEXT line. Searching from start.end() would
+    # match the remainder of the def line itself ("element_id):"), collapsing
+    # the span to the keyword and exempting nothing.
+    body = text.index("\n", start.end()) + 1
+    end = re.search(r"^\S", text[body:], re.M)
+    return (start.start(), body + (end.start() if end else len(text) - body))
+
+
 def check_removed_api(path, text, findings):
     """Members Autodesk deleted; these fail only at runtime, and only on new Revit."""
+    exempt = _compat_helper_span(text)
     for member, why in REMOVED_API.items():
         for hit in re.finditer(re.escape(member) + r"\b", text):
+            if exempt and exempt[0] <= hit.start() < exempt[1]:
+                continue
             findings.append(
                 Finding(ERROR, path, line_of(text, hit.start()), "removed-api", why)
             )

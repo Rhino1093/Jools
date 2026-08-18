@@ -19,18 +19,21 @@
     "tools"
   ],
 
+  // Specifying "exclude" REPLACES pyright's defaults rather than extending them,
+  // so the three built-ins must be restated. "**/.*" covers every dot-directory
+  // (.git, .venv, .vscode, .obsidian) and is the one Pylance warns about if absent.
   "exclude": [
-    "**/typings",
-    "**/.venv",
+    "**/.*",
+    "**/node_modules",
     "**/__pycache__",
-    "**/_deprecated",
-    "**/node_modules"
+    "**/typings",
+    "**/_deprecated"
   ],
 
   "ignore": [
-    "**/typings",
-    "**/.venv",
+    "**/.*",
     "**/__pycache__",
+    "**/typings",
     "**/_deprecated"
   ],
 
@@ -49,6 +52,21 @@
   "typeCheckingMode": "basic",
 
   // Unresolvable .NET / Revit imports are silenced.
+  //
+  // The three rules marked [.NET] below are OFF because the Revit stubs cannot
+  // model .NET semantics, not because the code is wrong. Verified against
+  // Revit 2026 RevitAPI.xml with tools/revit_api.py:
+  //   reportOperatorIssue        XYZ defines op_Subtraction/op_Multiply, which
+  //                              the stubs do not expose as __sub__/__mul__.
+  //   reportGeneralTypeIssues    Autodesk.Revit.Exceptions.* are real exception
+  //                              types at runtime but do not subclass
+  //                              BaseException in the stubs, so `except` on them
+  //                              is flagged.
+  //   reportInvalidTypeArguments pythonnet resolves generics by subscript, e.g.
+  //                              List[DB.ElementId](). The stubs declare List
+  //                              as non-generic.
+  // 19 of 21 tool scripts hit at least one of these. Do NOT "fix" the code to
+  // satisfy them - the code is correct and the analyzer is not.
   "reportMissingImports": "none",
   "reportMissingModuleSource": "none",
   "reportAttributeAccessIssue": "none",
@@ -63,6 +81,9 @@
   "reportCallIssue": "none",
   "reportUninitializedInstanceVariable": "none",
   "reportIncompatibleMethodOverride": "none",
+  "reportOperatorIssue": "none",
+  "reportGeneralTypeIssues": "none",
+  "reportInvalidTypeArguments": "none",
 
   // Real bugs worth seeing.
   "reportUndefinedVariable": "error",

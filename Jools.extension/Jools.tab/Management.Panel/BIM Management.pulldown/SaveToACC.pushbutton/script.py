@@ -3,7 +3,6 @@ import os
 import re
 import clr
 import json
-import sys
 
 # .NET / Revit API / WPF Imports
 clr.AddReference("RevitAPI")

@@ -1,4 +1,4 @@
-# !python3
+#! python3
 __author__ = "Ryan Johnston"
 __date__ = "2024-06-25"
 __purpose__ = "To align fill patterns with filled regions to test printing and run quality checks."
@@ -6,23 +6,30 @@ __purpose__ = "To align fill patterns with filled regions to test printing and r
 
 import clr
 import re
-import os, sys, math, datetime, time, logging
-clr.AddReference('ProtoGeometry')
+import sys
 clr.AddReference('RevitAPI')
-clr.AddReference('RevitServices')
 clr.AddReference('System.Windows.Forms')
 from Autodesk.DesignScript.Geometry import * # type: ignore
 from Autodesk.Revit.DB import *
 from Autodesk.Revit.UI import TaskDialog
-from RevitServices.Persistence import DocumentManager # type: ignore
-from RevitServices.Transactions import TransactionManager # type: ignore
-import System
 from System.Collections.Generic import List
-
 from System.Windows.Forms import Form, Label, MessageBox, MessageBoxButtons, MessageBoxIcon, TextBox, Button, DialogResult, ComboBox, CheckBox
 
 # Get the current document
 doc = __revit__.ActiveUIDocument.Document # type: ignore
+
+
+def eid_int(element_id):
+    """///Summary: An ElementId's integer value, valid in Revit 2022-2026.
+
+    Autodesk added ElementId.Value in 2024 and removed ElementId.IntegerValue
+    in 2026, so neither attribute alone covers every Revit this extension is
+    attached to. Written for both CPython 3 and IronPython 2.7.
+    """
+    value = getattr(element_id, "Value", None)
+    return int(value) if value is not None else element_id.IntegerValue
+
+
 
 if doc is None:
     TaskDialog.Show("Error", "No active document found. Open a Revit file and try again")
@@ -68,7 +75,7 @@ def get_fill_pattern_elements(doc):
     fill_pattern_dict = {}
 
     for fpe in fill_pattern_elements:
-        fill_pattern_id = fpe.Id.IntegerValue
+        fill_pattern_id = eid_int(fpe.Id)
         fill_pattern_name = fpe.Name
         fill_pattern_type = fpe
 
@@ -95,7 +102,7 @@ def get_filled_region_types(doc, fill_pattern_dict):
 
     for frt in filled_region_types:
 
-        fg_fill_pattern_id   = frt.ForegroundPatternId.IntegerValue
+        fg_fill_pattern_id   = eid_int(frt.ForegroundPatternId)
         fg_fill_pattern_name = fill_pattern_dict.get(fg_fill_pattern_id, {}).get("name", None)
 
         if fg_fill_pattern_name is None:
@@ -104,7 +111,7 @@ def get_filled_region_types(doc, fill_pattern_dict):
 
         filled_region_dict[frt.Id] = {
             "name"                        : frt.get_Name(),
-            "id"                          : frt.Id.IntegerValue,
+            "id"                          : eid_int(frt.Id),
             "element"                     : frt,
             "foreground_fill_pattern_name": fg_fill_pattern_name,
             "foreground_fill_pattern_id"  : fg_fill_pattern_id,
@@ -377,7 +384,7 @@ def create_filled_regions_with_annotations(doc, user_input_fr_spacing, max_per_r
     
     try:
         for pattern in sorted_fill_patterns:
-            fill_pattern_id = pattern.Id.IntegerValue #getting all the id's of the patterns so we can match them to their filled region
+            fill_pattern_id = eid_int(pattern.Id) #getting all the id's of the patterns so we can match them to their filled region
             matching_filled_region_id = None # Initialize the id variable to None to handle cases where no match is found
 
             for key in sorted_filled_regions_keys:
@@ -424,7 +431,7 @@ def create_filled_regions_with_annotations(doc, user_input_fr_spacing, max_per_r
             try:
                 filled_region_element_id = ElementId(matching_filled_region_id)
                 active_view_id = active_view.Id
-                create_filled_region = FilledRegion.Create(doc, filled_region_element_id, active_view_id, list_boundaries)
+                FilledRegion.Create(doc, filled_region_element_id, active_view_id, list_boundaries)
                 
                 if create_text_notes_for_filled_regions:
                     create_text_note = TextNote.Create(doc, doc.ActiveView.Id, point1, str(filled_region_name), text_note_type_id)

@@ -23,7 +23,6 @@ except Exception:
 clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
 from Autodesk.Revit.DB import (
-    FilteredElementCollector,
     BuiltInCategory,
     Transaction,
     TransactionStatus,
@@ -42,11 +41,8 @@ from System.Collections.Generic import List
 clr.AddReference("System.Windows.Forms")
 clr.AddReference("System.Drawing")
 from System.Windows.Forms import (
-    Application, Form, Label, TextBox, Button, 
-    CheckBox, CheckedListBox, DialogResult, 
-    MessageBox, MessageBoxButtons, MessageBoxIcon,
-    FormBorderStyle, FormStartPosition, AnchorStyles,
-    Padding, GroupBox, DockStyle, ProgressBar
+    Application, Form, Label, TextBox, Button, CheckedListBox, DialogResult,
+    FormBorderStyle, FormStartPosition, GroupBox, ProgressBar
 )
 from System.Drawing import Point, Size, Font, FontStyle
 
@@ -62,6 +58,19 @@ output = script.get_output()
 logger = script.get_logger()
 uidoc = __revit__.ActiveUIDocument # type: ignore
 doc = uidoc.Document
+
+
+def eid_int(element_id):
+    """///Summary: An ElementId's integer value, valid in Revit 2022-2026.
+
+    Autodesk added ElementId.Value in 2024 and removed ElementId.IntegerValue
+    in 2026, so neither attribute alone covers every Revit this extension is
+    attached to. Written for both CPython 3 and IronPython 2.7.
+    """
+    value = getattr(element_id, "Value", None)
+    return int(value) if value is not None else element_id.IntegerValue
+
+
 
 # --- HELPER CLASSES ---
 
@@ -282,7 +291,7 @@ def main():
                 current_ids = [r.ElementId for r in picked_refs]
                 
                 # Convert to .NET List for SetElementIds
-                element_id_list = List[ElementId](current_ids)
+                element_id_list = List[ElementId](current_ids)  # type: ignore
                 uidoc.Selection.SetElementIds(element_id_list) # Sync with Revit UI
             except Exception as e:
                 output.print_md(u"**ERROR:** Error during reselection: {}".format(e))
@@ -389,7 +398,7 @@ def main():
                         
                         # Store as list for robust table printing
                         moved_elements_report.append([
-                            str(el.Id.IntegerValue),
+                            str(eid_int(el.Id)),
                             get_category_name(el),
                             fam,
                             typ,

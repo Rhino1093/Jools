@@ -5,14 +5,10 @@ __purpose__ = "To create 3D views for each level with set parameters for constra
 
 import clr
 clr.AddReference('RevitAPI')
-clr.AddReference('RevitServices')
-clr.AddReference('RevitNodes')  
 clr.AddReference('RevitAPIUI')  
 from Autodesk.Revit.DB import View3D, FilteredElementCollector, Level, Transaction, BoundingBoxXYZ, XYZ, ViewFamilyType, ViewFamily, RevitLinkInstance, View, ViewType
 from Autodesk.Revit.UI import TaskDialog
 import System #type: ignore
-from RevitServices.Persistence import DocumentManager #type: ignore
-from RevitServices.Transactions import TransactionManager #type: ignore
 from System.Drawing import Size, Point #type: ignore
 from System.Windows.Forms import Form, Label, MessageBox, ComboBox, ComboBoxStyle, TextBox, Button, DialogResult, CheckBox, FormStartPosition, CheckedListBox, Panel, SelectionMode, CheckState, BorderStyle #type: ignore
 

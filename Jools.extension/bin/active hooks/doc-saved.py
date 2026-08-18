@@ -3,7 +3,6 @@
 from pyrevit import forms
 from pyrevit import script
 from pyrevit import revit,DB
-import clr
 from Autodesk.Revit.DB import Transaction
 
 # get document

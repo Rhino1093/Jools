@@ -1,11 +1,9 @@
-# !python3
+#! python3
 import clr
 import sys
 clr.AddReference('RevitAPI')
-clr.AddReference('RevitServices')
 clr.AddReference('System.Windows.Forms')
 from Autodesk.Revit.DB import *
-from RevitServices.Persistence import DocumentManager
 from System.Windows.Forms import MessageBox, MessageBoxButtons, MessageBoxIcon, Form, Label, ComboBox, Button, DialogResult, ComboBoxStyle
 
 class InputForm(Form):

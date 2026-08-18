@@ -1,6 +1,5 @@
 #! python
 import os
-import re
 import clr
 import json
 
@@ -22,7 +21,7 @@ from System.IO import StringReader # type: ignore
 from System.Windows.Forms import FolderBrowserDialog, DialogResult # type: ignore
 from System.Xml import XmlReader # type: ignore
 
-from pyrevit import revit, forms, script
+from pyrevit import forms, script
 
 # Initialize pyRevit components
 uidoc = __revit__.ActiveUIDocument # type: ignore

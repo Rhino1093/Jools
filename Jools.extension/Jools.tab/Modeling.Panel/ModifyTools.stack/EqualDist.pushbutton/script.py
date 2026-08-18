@@ -25,8 +25,6 @@ from Autodesk.Revit.Exceptions import OperationCanceledException # type: ignore
 
 from pyrevit import script
 
-import math
-
 # .NET / WPF Imports
 clr.AddReference("PresentationFramework")
 clr.AddReference("PresentationCore")

@@ -1,6 +1,5 @@
 #! python3
 import clr
-import sys
 import csv
 import math
 

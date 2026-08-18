@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import clr
-import sys
 
 # .NET / Revit API / WPF Imports
 clr.AddReference("RevitAPI")

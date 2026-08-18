@@ -1,8 +1,6 @@
 #! python3
 import clr
-import sys
 import csv
-import os
 
 # .NET / Revit API / WPF Imports
 clr.AddReference("RevitAPI")

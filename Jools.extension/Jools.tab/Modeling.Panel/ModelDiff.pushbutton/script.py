@@ -46,7 +46,7 @@ def main():
     try:
         with open(csv_path, 'r', encoding='utf-8-sig') as f:
             reader = csv.reader(f)
-            header = next(reader, None)
+            next(reader, None)
             for row in reader:
                 if len(row) < 2:
                     continue

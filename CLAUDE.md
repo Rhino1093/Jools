@@ -14,7 +14,7 @@ Do not guess these. They were read off this machine.
 
 | Thing | Value |
 |---|---|
-| pyRevit | 6.4.0 (`%APPDATA%\pyRevit-Master`) |
+| pyRevit | 6.5.4 (`%APPDATA%\pyRevit-Master`) |
 | CPython engine | 3.12.3 (`bin/cengines/CPY3123`), set via `cpyengine = 3123` |
 | IronPython engines | 2.7.12 (default), 3.4.2 — both present but **not used by this repo** |
 | Revit installed | 2019 – 2026 |
@@ -50,7 +50,7 @@ expensive failure mode in this repo — **check line 1 first when a tool won't s
 
 ### 2.2 Never import `pyrevit.forms`
 
-pyRevit 6.4 split `forms` into two backends (`pyrevit/forms/__init__.py`):
+pyRevit 6.4+ splits `forms` into two backends (`pyrevit/forms/__init__.py`):
 
 ```python
 if IRONPY:  from ._ipy import *   # the real implementation
@@ -68,7 +68,7 @@ Also: `forms.ask_for_number` does not exist in **any** engine. It is `ask_for_nu
 ### 2.3 Install the events shim before any `pyrevit` import
 
 `from pyrevit import script` → `pyrevit/script.py:29` → `from pyrevit import revit`
-→ `pyrevit/revit/__init__.py:26` → `from pyrevit.revit import events`, whose line 13
+→ `pyrevit/revit/__init__.py:37` → `from pyrevit.revit import events`, whose line 14
 subclasses a .NET interface at module scope. Under pythonnet this can fail with
 `interface takes exactly one argument`.
 
@@ -89,16 +89,44 @@ sys.modules['pyrevit.revit.events'] = _mock
 Five scripts here already carry it. If a `#! python3` tool dies on its import block
 with no line of your own code in the trace, this is why.
 
-### 2.4 `ElementId.IntegerValue` is removed in Revit 2026
+### 2.4 Never read an ElementId's integer directly — use `eid_int()`
 
-Verified absent from `Revit 2026\RevitAPI.xml`. Deprecated in 2024, gone in 2026.
+pyRevit is attached to **Revit 2022, 2023, 2024, 2025 and 2026** on this machine
+(`pyrevit attached`). No single attribute works on all of them:
+
+| Revit | `.IntegerValue` | `.Value` |
+|---|---|---|
+| 2022, 2023 | ✅ | ❌ does not exist |
+| 2024, 2025 | ✅ deprecated | ✅ |
+| 2026 | ❌ **removed** | ✅ |
+
+So `.IntegerValue` breaks 2026 and `.Value` breaks 2022/2023. Use the compat
+helper, which five scripts already carry — copy it in verbatim:
 
 ```python
-eid.IntegerValue    # ❌ AttributeError in Revit 2026
-eid.Value           # ✅ Int64, available 2024+
+def eid_int(element_id):
+    """///Summary: An ElementId's integer value, valid in Revit 2022-2026.
+
+    Autodesk added ElementId.Value in 2024 and removed ElementId.IntegerValue
+    in 2026, so neither attribute alone covers every Revit this extension is
+    attached to. Written for both CPython 3 and IronPython 2.7.
+    """
+    value = getattr(element_id, "Value", None)
+    return int(value) if value is not None else element_id.IntegerValue
 ```
 
-Five scripts in this repo still use `IntegerValue`. Do not write new ones.
+```python
+fill_id = fpe.Id.IntegerValue    # ❌ AttributeError in Revit 2026
+fill_id = fpe.Id.Value           # ❌ AttributeError in Revit 2022/2023
+fill_id = eid_int(fpe.Id)        # ✅
+```
+
+The validator exempts `.IntegerValue` inside a function named `eid_int` and
+flags it everywhere else. Confirm any version claim with
+`python tools\revit_api.py --exists ElementId.Value --version 2023`.
+
+Note the same trap applies to the constructor: `ElementId(Int32)` was removed in
+2026; only `ElementId(Int64)` remains.
 
 ### 2.5 Never import Dynamo modules
 
@@ -330,7 +358,24 @@ Other sources, in descending trustworthiness:
 - Inline comments explain **why**, never what.
 - `# type: ignore` freely on `clr`, `clr.AddReference`, and every `Autodesk.*` /
   `System.*` import — Pylance cannot resolve them and the noise is not worth fighting.
+
 - No abstraction until the same logic appears in a third script; then put it in
   `Jools.extension/lib/`.
 - Don't build a framework. If a tool grows past ~500 lines, that's a signal it
   should be two tools.
+
+### Pylance false positives on .NET interop
+
+Three rules are disabled in `pyrightconfig.json` because the stubs cannot model
+.NET semantics. If you see one of these, **the code is right and the analyzer is
+wrong** — do not rewrite working code to satisfy it:
+
+| Rule | What it wrongly flags | Reality |
+|---|---|---|
+| `reportOperatorIssue` | `xyz_a - xyz_b`, `DB.XYZ.BasisZ * 10.0` | `XYZ` defines `op_Subtraction` / `op_Multiply` |
+| `reportGeneralTypeIssues` | `except OperationCanceledException:` | `Autodesk.Revit.Exceptions.*` are real exceptions at runtime |
+| `reportInvalidTypeArguments` | `List[DB.ElementId]()` | pythonnet resolves .NET generics by subscript |
+
+Confirm any doubt with `python tools
+evit_api.py XYZ`, which lists the real
+operator overloads. 19 of 21 tool scripts rely on at least one of these patterns.
