@@ -1,0 +1,51 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Validate pyRevit extension",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "${workspaceFolder}/tools/validate_extension.py",
+        "--compact"
+      ],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": {
+        "owner": "pyrevit",
+        "fileLocation": "absolute",
+        "pattern": {
+          "regexp": "^(.+?):(\\d+):(\\d+):\\s+(error|warning)\\s+\\[([^\\]]+)\\]\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "code": 5,
+          "message": 6
+        }
+      }
+    },
+    {
+      "label": "Validate pyRevit extension (full report)",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "${workspaceFolder}/tools/validate_extension.py"
+      ],
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}

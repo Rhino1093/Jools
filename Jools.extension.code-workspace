@@ -5,8 +5,10 @@
 		}
 	],
 	"settings": {
+		// Python analysis is configured in .vscode/settings.json so there is one
+		// source of truth. Workspace-file settings override folder settings, so
+		// do NOT add python.* keys here — they will silently win and diverge.
 		"betterAlign.surroundSpace": {
-			
 			"colon": [
 				0,
 				1
@@ -20,26 +22,13 @@
 				1
 			],
 			"comment": 2
-		},
-		"python.languageServer": "Default",
-		"python.analysis.logLevel": "Error",
-
-		"python.analysis.typeCheckingMode": "off",
-
-		"python.analysis.stubPath": "typings",
-		"python.analysis.extraPaths": [
-			"C:\\Users\\rjohnston\\AppData\\Roaming\\pyRevit-Master\\pyrevitlib",
-			"C:\\Users\\rjohnston\\AppData\\Roaming\\pyRevit-Master\\pyrevitlib\\site-packages",
-			"C:\\Users\\rjohnston\\AppData\\Roaming\\pyRevit-Master\\site-packages"
-		],
-		
-		"python.defaultInterpreterPath": "C:\\Users\\rjohnston\\AppData\\Roaming\\pyRevit-Master\\bin\\cengines\\CPY3123\\python.exe",
-		"python.analysis.diagnosticSeverityOverrides": {
-
-		},
-		"editor.codeActionsOnSave": {
-
-		},
-		
+		}
+	},
+	"extensions": {
+		"recommendations": [
+			"ms-python.python",
+			"ms-python.vscode-pylance",
+			"redhat.vscode-yaml"
+		]
 	}
 }

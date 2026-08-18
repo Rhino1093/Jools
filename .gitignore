@@ -1,5 +1,5 @@
 # dependencies & stubs
-*/typings/
+**/typings/
 *.pyi
 
 # python
@@ -9,7 +9,12 @@ __pycache__/
 .venv/
 
 # ide configurations
-.vscode/
+# Shared analysis config and tasks ARE tracked so a fresh clone still detects
+# issues; only per-machine state is ignored. See CLAUDE.md 8.
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/extensions.json
 
 # secrets & logs
 .env

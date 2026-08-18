@@ -1,0 +1,10 @@
+{
+  // Intentionally empty.
+  //
+  // This file previously set python.analysis.extraPaths and stubPath using
+  // ${workspaceFolder}, which resolves to the REPO ROOT (not this folder) when
+  // Jools.extension.code-workspace is open. That pointed at <repo>/typings and
+  // <repo>/.venv, neither of which exists, so stubs never loaded.
+  //
+  // All Python analysis settings now live in <repo>/.vscode/settings.json.
+}

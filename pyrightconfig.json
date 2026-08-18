@@ -1,0 +1,77 @@
+// AUTHORITATIVE analysis config.
+//
+// Pylance reads this file at the workspace root and it OVERRIDES the
+// python.analysis.* path settings in .vscode/settings.json — include, exclude,
+// ignore, stubPath, extraPaths, and typeCheckingMode all come from here.
+//
+// Why it exists: settings.json exclude/ignore globs did not stop Pylance from
+// reporting ~110k diagnostics inside Jools.extension/typings (11,639 .pyi files).
+// "include" is not a filter that something else can defeat — it is the definition
+// of what gets analyzed. Anything not listed is never reported, though it is
+// still read for imports and completions.
+//
+// Add a new top-level source folder to "include" or Pylance will not check it.
+{
+  "include": [
+    "Jools.extension/Jools.tab",
+    "Jools.extension/bin",
+    "Jools.extension/hooks",
+    "tools"
+  ],
+
+  "exclude": [
+    "**/typings",
+    "**/.venv",
+    "**/__pycache__",
+    "**/_deprecated",
+    "**/node_modules"
+  ],
+
+  "ignore": [
+    "**/typings",
+    "**/.venv",
+    "**/__pycache__",
+    "**/_deprecated"
+  ],
+
+  // Deepest folder directly containing Autodesk/, System/, clr.pyi, wpf.pyi.
+  "stubPath": "Jools.extension/typings/RVT 25",
+
+  // Real source only. Never put typings here — that promotes stubs to user code.
+  "extraPaths": [
+    "C:/Users/rjohnston/AppData/Roaming/pyRevit-Master/pyrevitlib",
+    "C:/Users/rjohnston/AppData/Roaming/pyRevit-Master/site-packages"
+  ],
+
+  // Matches pyRevit's CPY3123 engine — the interpreter that runs `#! python3`.
+  "pythonVersion": "3.12",
+  "pythonPlatform": "Windows",
+  "typeCheckingMode": "basic",
+
+  // Unresolvable .NET / Revit imports are silenced.
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none",
+  "reportAttributeAccessIssue": "none",
+  "reportOptionalMemberAccess": "none",
+  "reportOptionalSubscript": "none",
+  "reportOptionalCall": "none",
+  "reportOptionalIterable": "none",
+  "reportOptionalOperand": "none",
+  "reportOptionalContextManager": "none",
+  "reportIndexIssue": "none",
+  "reportArgumentType": "none",
+  "reportCallIssue": "none",
+  "reportUninitializedInstanceVariable": "none",
+  "reportIncompatibleMethodOverride": "none",
+
+  // Real bugs worth seeing.
+  "reportUndefinedVariable": "error",
+  "reportUnboundVariable": "error",
+  "reportSelfClsParameterName": "error",
+  "reportRedeclaration": "warning",
+  "reportUnusedImport": "warning",
+  "reportUnusedVariable": "warning",
+  "reportUnusedExpression": "warning",
+  "reportUnreachable": "warning",
+  "reportAssertAlwaysTrue": "warning"
+}

@@ -1,0 +1,65 @@
+{
+  // ---------------------------------------------------------------------
+  // Editor-side settings only.
+  //
+  // All ANALYSIS configuration — include, exclude, ignore, stubPath,
+  // extraPaths, typeCheckingMode, and every report* rule — lives in
+  // pyrightconfig.json at the repo root. Pylance gives that file precedence,
+  // so duplicating those keys here would be dead config that silently
+  // disagrees. Do not re-add them.
+  //
+  // PORTABILITY: the interpreter path below and the extraPaths in
+  // pyrightconfig.json hardcode C:\Users\rjohnston. Update both on a
+  // different machine or username.
+  // ---------------------------------------------------------------------
+
+  // pyRevit's own CPython 3.12.3 engine — the exact interpreter that runs
+  // `#! python3` scripts inside Revit.
+  "python.defaultInterpreterPath": "C:\\Users\\rjohnston\\AppData\\Roaming\\pyRevit-Master\\bin\\cengines\\CPY3123\\python.exe",
+
+  "python.languageServer": "Pylance",
+
+  // Pylance-only; has no pyrightconfig.json equivalent. "workspace" checks
+  // every file in the include set, not just open ones — so a broken script
+  // surfaces before you open it.
+  //
+  // ESCAPE HATCH: if the Problems panel is ever flooded, set this to
+  // "openFilesOnly". tools\validate_extension.py still covers the whole
+  // extension for the pyRevit-specific failure modes.
+  "python.analysis.diagnosticMode": "workspace",
+
+  "python.analysis.autoImportCompletions": true,
+
+  "[python]": {
+    "editor.rulers": [
+      100
+    ],
+    "editor.trimAutoWhitespace": true
+  },
+
+  "files.exclude": {
+    "**/__pycache__": true
+  },
+  "search.exclude": {
+    "**/typings": true,
+    "**/.venv": true,
+    "**/_deprecated": true,
+    "**/Icons.svg": true
+  },
+  // The stub tree is large and never changes; watching it wastes CPU.
+  "files.watcherExclude": {
+    "**/typings/**": true,
+    "**/.venv/**": true,
+    "**/__pycache__/**": true
+  },
+
+  "cSpell.words": [
+    "APIUI",
+    "cengines",
+    "pyrevit",
+    "pyrevitlib",
+    "Revit",
+    "urlbutton",
+    "XAML"
+  ]
+}
