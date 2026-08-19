@@ -8,6 +8,11 @@ from System.Windows.Forms import MessageBox, MessageBoxButtons, MessageBoxIcon, 
 
 class InputForm(Form):
     def __init__(self):
+
+        # pythonnet does not run the .NET base constructor implicitly the way
+        # IronPython did; without it the control is uninitialised and the first
+        # `self.Text = ...` raises NullReferenceException.
+        super().__init__()
         self.Text = "ObjSty Line Weights"
         self.Width = 275
         self.Height = 600

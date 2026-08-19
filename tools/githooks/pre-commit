@@ -1,0 +1,24 @@
+#!/bin/sh
+#
+# Blocks a commit when validate_extension.py reports an ERROR.
+# Warnings never block - they are the deliberate IronPython tools and the
+# advisory events-shim checks.
+#
+# Enable (once per clone):   git config core.hooksPath tools/githooks
+# Bypass for one commit:     git commit --no-verify
+#
+# Full rules: CLAUDE.md section 2.
+
+repo_root=$(git rev-parse --show-toplevel)
+
+python "$repo_root/tools/validate_extension.py" --quiet
+status=$?
+
+if [ $status -ne 0 ]; then
+    echo ""
+    echo "pre-commit: validate_extension.py found errors (see above)."
+    echo "            Fix them, or bypass once with: git commit --no-verify"
+    exit 1
+fi
+
+exit 0

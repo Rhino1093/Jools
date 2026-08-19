@@ -1,5 +1,8 @@
-#! python
+#! python3
 import os
+
+import joolslib          # Jools.extension/lib, see CLAUDE.md section 6a
+joolslib.install_events_shim()
 import clr
 import json
 
@@ -21,7 +24,7 @@ from System.IO import StringReader # type: ignore
 from System.Windows.Forms import FolderBrowserDialog, DialogResult # type: ignore
 from System.Xml import XmlReader # type: ignore
 
-from pyrevit import forms, script
+from pyrevit import script
 
 # Initialize pyRevit components
 uidoc = __revit__.ActiveUIDocument # type: ignore
@@ -237,15 +240,15 @@ class StartupWindow(object):
         view_name = self.txt_view_name.Text.strip()
         
         if not source or not os.path.exists(source):
-            forms.alert("Please select a valid source local folder.", title="Input Error")
+            joolslib.alert("Please select a valid source local folder.", title="Input Error")
             return
             
         if not dest_nwc or not os.path.exists(dest_nwc):
-            forms.alert("Please select a valid destination NWC folder.", title="Input Error")
+            joolslib.alert("Please select a valid destination NWC folder.", title="Input Error")
             return
             
         if not view_name:
-            forms.alert("Please enter a valid target view name.", title="Input Error")
+            joolslib.alert("Please enter a valid target view name.", title="Input Error")
             return
             
         # Save settings
@@ -402,7 +405,7 @@ def dismiss_dialog(sender, args):
 def main():
     # Check if NWC Exporter is available
     if not DB.OptionalFunctionalityUtils.IsNavisworksExporterAvailable():
-        forms.alert("Navisworks exporter utility is not available on this machine.", title="Error")
+        joolslib.alert("Navisworks exporter utility is not available on this machine.", title="Error")
         return
 
     # 1. Initialize and Display UI
@@ -433,7 +436,7 @@ def main():
                 rvt_files.append(os.path.join(source_folder, f))
 
     if not rvt_files:
-        forms.alert("No Revit models (.rvt) found in the selected source folder.")
+        joolslib.alert("No Revit models (.rvt) found in the selected source folder.")
         return
 
     # Build NWC options object
@@ -472,7 +475,7 @@ def main():
     
     try:
         total_files = len(rvt_files)
-        with forms.ProgressBar(title="Exporting NWC Files", cancellable=True) as pb:
+        with joolslib.OutputProgress(output, "Exporting NWC Files", total_files) as pb:
             for i, file_path in enumerate(rvt_files):
                 file_name = os.path.basename(file_path)
                 

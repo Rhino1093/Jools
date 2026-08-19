@@ -1,5 +1,8 @@
-#! python
+#! python3
 import os
+
+import joolslib          # Jools.extension/lib, see CLAUDE.md section 6a
+joolslib.install_events_shim()
 import re
 import clr
 import json
@@ -22,7 +25,7 @@ from System.IO import StringReader # type: ignore
 from System.Windows.Forms import FolderBrowserDialog, DialogResult # type: ignore
 from System.Xml import XmlReader # type: ignore
 
-from pyrevit import forms, script
+from pyrevit import script
 
 # Initialize pyRevit components
 uidoc = __revit__.ActiveUIDocument # type: ignore
@@ -324,14 +327,14 @@ class StartupWindow(object):
         dest_nwc = self.txt_dest_nwc.Text.strip()
         
         if not source or not os.path.exists(source):
-            forms.alert("Please select a valid source local folder.", title="Input Error")
+            joolslib.alert("Please select a valid source local folder.", title="Input Error")
             return
             
         process_rvt = self.chk_process_rvt.IsChecked
         process_nwc = self.chk_process_nwc.IsChecked
         
         if not process_rvt and not process_nwc:
-            forms.alert("Please select at least one action (Save RVT or Export NWC) to run.", title="Input Error")
+            joolslib.alert("Please select at least one action (Save RVT or Export NWC) to run.", title="Input Error")
             return
             
         if process_rvt:
@@ -340,25 +343,25 @@ class StartupWindow(object):
                 acc_url = self.txt_url.Text.strip()
                 
                 if not account_id:
-                    forms.alert("Please enter a valid Account ID GUID.", title="Input Error")
+                    joolslib.alert("Please enter a valid Account ID GUID.", title="Input Error")
                     return
                 try:
                     Guid(account_id)
                 except Exception:
-                    forms.alert("Account ID is not a valid GUID format.", title="Input Error")
+                    joolslib.alert("Account ID is not a valid GUID format.", title="Input Error")
                     return
                     
                 if not acc_url:
-                    forms.alert("Please enter a valid ACC URL.", title="Input Error")
+                    joolslib.alert("Please enter a valid ACC URL.", title="Input Error")
                     return
             else:
                 if not dest_rvt or not os.path.exists(dest_rvt):
-                    forms.alert("Please select a valid destination RVT folder.", title="Input Error")
+                    joolslib.alert("Please select a valid destination RVT folder.", title="Input Error")
                     return
                     
         if process_nwc:
             if not dest_nwc or not os.path.exists(dest_nwc):
-                forms.alert("Please select a valid destination NWC folder.", title="Input Error")
+                joolslib.alert("Please select a valid destination NWC folder.", title="Input Error")
                 return
                 
         # Save settings
@@ -555,13 +558,13 @@ def main():
     
     # Check if NWC Exporter is available if NWC export is requested
     if process_nwc and not DB.OptionalFunctionalityUtils.IsNavisworksExporterAvailable():
-        forms.alert("Navisworks exporter utility is not installed on this machine. Cannot export NWC files.", title="Error")
+        joolslib.alert("Navisworks exporter utility is not installed on this machine. Cannot export NWC files.", title="Error")
         return
 
     # 3. Gather local files
     local_rvt_files = [f for f in os.listdir(source_folder) if f.lower().endswith('.rvt')]
     if not local_rvt_files:
-        forms.alert("No Revit models (.rvt) found in the selected source folder.")
+        joolslib.alert("No Revit models (.rvt) found in the selected source folder.")
         return
 
     view_name = "PDI Coordination"
@@ -602,7 +605,7 @@ def main():
     
     try:
         total_files = len(local_rvt_files)
-        with forms.ProgressBar(title="Processing PDI Coordination Models", cancellable=True) as pb:
+        with joolslib.OutputProgress(output, "Processing PDI Coordination Models", total_files) as pb:
             for i, file_name in enumerate(local_rvt_files):
                 # Check for cancellation
                 if pb.cancelled:

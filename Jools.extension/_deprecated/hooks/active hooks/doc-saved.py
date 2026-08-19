@@ -1,3 +1,6 @@
+#! python
+# Stays on IronPython deliberately: this hook uses pyrevit.forms, which raises
+# PyRevitCPythonNotSupported under CPython 3 (CLAUDE.md 2.2).
 #import revitron and pyrevit modules
 
 from pyrevit import forms

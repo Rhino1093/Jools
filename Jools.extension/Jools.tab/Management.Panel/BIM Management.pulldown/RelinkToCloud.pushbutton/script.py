@@ -26,7 +26,7 @@ from Autodesk.Revit.UI import TaskDialog # type: ignore
 from System.Windows.Forms import FolderBrowserDialog, DialogResult # type: ignore
 
 # Load pyRevit framework for output
-from pyrevit import script, forms
+from pyrevit import script
 
 # Standard pyRevit variables
 uidoc = __revit__.ActiveUIDocument # type: ignore
@@ -45,6 +45,38 @@ def normalize_name(name):
     if name.endswith('.rvt'): 
         name = name[:-4]
     return name.strip()
+
+
+class OutputProgress(object):
+    """///Summary: Drop-in replacement for forms.ProgressBar, CPython-safe.
+
+    pyrevit.forms raises PyRevitCPythonNotSupported under `#! python3`
+    (CLAUDE.md 2.2), but the pyRevit output window's own progress bar works on
+    every engine. Closing the output window stands in for the old cancel button,
+    so the `pb.cancelled` check in the loop keeps working unchanged.
+    """
+
+    def __init__(self, title, total):
+        self._title = title
+        self._total = max(1, total)
+
+    def __enter__(self):
+        output.set_title(self._title)
+        output.update_progress(0, self._total)
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        output.reset_progress()
+        return False
+
+    @property
+    def cancelled(self):
+        """True once the user closes the output window."""
+        return output.is_closed_by_user
+
+    def update_progress(self, current, total=None):
+        output.update_progress(current, total or self._total)
+
 
 def main():
     # 1. Select Folder
@@ -77,7 +109,7 @@ def main():
     results = []
     total = len(targets)
     
-    with forms.ProgressBar(title="Relinking to Cloud...", total=total, cancellable=True) as pb:
+    with OutputProgress("Relinking to Cloud...", total) as pb:
         for i, (link_type, local_path, link_name) in enumerate(targets):
             if pb.cancelled:
                 logger.warning("Process cancelled by user.")

@@ -1,0 +1,2 @@
+title: "Section by Object"
+tooltip: "In a floor, ceiling or structural plan: pick an object, then click the side to look from. Creates a section as long as the object plus an offset at each end, with the top and bottom taken from the plan's view range, and opens it. Shift+Click to set the section view type and the offset."

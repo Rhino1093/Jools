@@ -4,17 +4,23 @@ import csv
 import re
 import clr # type: ignore
 import System # type: ignore
-from pyrevit import revit, forms, script
+import joolslib          # Jools.extension/lib, see CLAUDE.md section 6a
+joolslib.install_events_shim()   # must precede any pyrevit import
+
+from pyrevit import revit, script
 
 clr.AddReference("RevitAPI") # type: ignore
 clr.AddReference("PresentationFramework") # type: ignore
 from Autodesk.Revit import DB # type: ignore
+from Autodesk.Revit.UI import TaskDialog # type: ignore
 from System.Collections.Generic import List # type: ignore
 from Microsoft.Win32 import OpenFileDialog # type: ignore
 
 doc = revit.doc
 uidoc = revit.uidoc
 logger = script.get_logger()
+
+TOOL_TITLE = "Model Diff"
 
 def pick_csv_file():
     dialog = OpenFileDialog()
@@ -61,11 +67,11 @@ def main():
                     elif change_col == 'removed':
                         removed_ids.append(DB.ElementId(id_int))
     except Exception as e:
-        forms.alert("Error reading CSV file: {}".format(e))
+        TaskDialog.Show(TOOL_TITLE, "Error reading CSV file: {}".format(e))
         return
 
     if not modified_ids and not removed_ids:
-        forms.alert("No modified or removed elements found in the CSV.")
+        TaskDialog.Show(TOOL_TITLE, "No modified or removed elements found in the CSV.")
         return
 
     with revit.Transaction("Create Model Diff View"):
@@ -75,7 +81,7 @@ def main():
         all_valid_ids = valid_modified + valid_removed
 
         if not all_valid_ids:
-            forms.alert("None of the elements listed in the CSV could be found in the current model.")
+            TaskDialog.Show(TOOL_TITLE, "None of the elements listed in the CSV could be found in the current model.")
             return
 
         view_family_types = DB.FilteredElementCollector(doc).OfClass(DB.ViewFamilyType).WhereElementIsElementType().ToElements()
@@ -86,7 +92,7 @@ def main():
                 break
                 
         if not vft_3d:
-            forms.alert("Could not find a 3D View Family Type.")
+            TaskDialog.Show(TOOL_TITLE, "Could not find a 3D View Family Type.")
             return
 
         view3d = DB.View3D.CreateIsometric(doc, vft_3d.Id)

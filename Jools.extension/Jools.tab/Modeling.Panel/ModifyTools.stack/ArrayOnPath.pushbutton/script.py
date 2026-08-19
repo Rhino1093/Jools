@@ -1,17 +1,25 @@
-#! python
+#! python3
 # coding: utf-8
 from __future__ import division
 
 import clr  # type: ignore
 
+import joolslib          # Jools.extension/lib, see CLAUDE.md section 6a
+joolslib.install_events_shim()
+
 clr.AddReference("RevitAPI")  # type: ignore
 clr.AddReference("RevitAPIUI")  # type: ignore
+clr.AddReference('System.Windows.Forms')  # type: ignore
+clr.AddReference('System.Drawing')  # type: ignore
 
 from Autodesk.Revit.Exceptions import OperationCanceledException  # type: ignore
 from collections import OrderedDict
 from System.Collections.Generic import List  # type: ignore
-from pyrevit import DB, UI, forms, script
-from rpw.ui.forms import FlexForm, Label, TextBox, Button, ComboBox, CheckBox, Separator
+from System.Windows.Forms import (Form, Label, TextBox, Button, CheckBox, ComboBox,
+                                  ComboBoxStyle, DialogResult, FormStartPosition,
+                                  FormBorderStyle)  # type: ignore
+from System.Drawing import Size, Point  # type: ignore
+from pyrevit import DB, UI, script
 
 
 __author__ = "Ryan Johnston"
@@ -50,26 +58,22 @@ AXIS_OPTIONS = OrderedDict(
 )
 
 
-if not hasattr(forms, "ask_for_number"):
-    def _fallback_ask_for_number(prompt, default=None, title=None):
-        default_text = "" if default is None else str(default)
-        value = forms.ask_for_string(prompt=prompt, default=default_text, title=title)
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except ValueError:
-            forms.alert("Enter a numeric value.", title=title or "Input Error")
-            return None
-
-    forms.ask_for_number = _fallback_ask_for_number  # type: ignore
 
 
 def _show_error(message):
-    forms.alert(message, title="Array On Path")
+    joolslib.alert(message, title="Array On Path")
 
+
+# pythonnet emits a proxy type <__namespace__>.<ClassName> into a dynamic assembly
+# that survives for the whole Revit session, so a fixed name collides with
+# "Duplicate type name within an assembly" on the second run.
+_NS = joolslib.unique_namespace("ArrayOnPath")
 
 class FamilyInstanceFilter(UI.Selection.ISelectionFilter):
+    # Required by pythonnet to emit the interface proxy type; must be unique per
+    # execution (see _NS above and CLAUDE.md section 2.7).
+    __namespace__ = _NS
+
     def AllowElement(self, element):
         return isinstance(element, DB.FamilyInstance)
 
@@ -78,6 +82,10 @@ class FamilyInstanceFilter(UI.Selection.ISelectionFilter):
 
 
 class CurveElementFilter(UI.Selection.ISelectionFilter):
+    # Required by pythonnet to emit the interface proxy type; must be unique per
+    # execution (see _NS above and CLAUDE.md section 2.7).
+    __namespace__ = _NS
+
     def AllowElement(self, element):
         return isinstance(element, DB.CurveElement) and isinstance(
             element.Location, DB.LocationCurve
@@ -87,33 +95,134 @@ class CurveElementFilter(UI.Selection.ISelectionFilter):
         return False
 
 
+class _ArrayOptionsDialog(Form):
+    """///Summary: Options dialog for Array On Path.
+
+    Replaces the rpw FlexForm this tool used under IronPython. rpw cannot load
+    on pyRevit's CPython 3.12 engine at all: rpw/utils/sphinx_compat.py does
+    `import imp`, and the imp module was removed in Python 3.12.
+
+    Exposes .values as an rpw-compatible dict so the calling validation loop is
+    unchanged. Combo boxes display the OrderedDict keys and return their values.
+    """
+
+    def __init__(self):
+
+        # pythonnet does not run the .NET base constructor implicitly the way
+        # IronPython did; without it the control is uninitialised and the first
+        # `self.Text = ...` raises NullReferenceException.
+        super().__init__()
+        self.values = None
+        self._combos = {}
+        self._texts = {}
+        self._checks = {}
+
+        self.Text = "Array On Path"
+        self.ClientSize = Size(400, 500)
+        self.FormBorderStyle = FormBorderStyle.FixedDialog
+        self.StartPosition = FormStartPosition.CenterScreen
+        self.MinimizeBox = False
+        self.MaximizeBox = False
+
+        y = 12
+
+        y = self._add_combo("path_type", "Path Type", PATH_OPTIONS,
+                            "Detail / Model Line", y)
+        y = self._add_combo("mode", "Placement Mode", MODE_OPTIONS, "By Count", y)
+        y = self._add_text("count", "Total Count", "5", y)
+        y = self._add_text("spacing", "Spacing (project units)", "5.0", y)
+        y = self._add_check("fill_even", "Fill path evenly (spacing mode)", False, y)
+        y = self._add_check("include_start", "Include path start", True, y)
+        y = self._add_check("include_end", "Include path end", True, y)
+        y = self._add_check("align_to_path", "Align instances to path direction", True, y)
+        y = self._add_combo("axis_mode", "Alignment Axis", AXIS_OPTIONS,
+                            "Family X axis", y)
+        y = self._add_check("create_group", "Group resulting elements", True, y)
+
+        ok = Button()
+        ok.Text = "Place Instances"
+        ok.Size = Size(140, 26)
+        ok.Location = Point(120, y + 10)
+        ok.DialogResult = DialogResult.OK
+        ok.Click += self._on_ok
+        self.Controls.Add(ok)
+
+        cancel = Button()
+        cancel.Text = "Cancel"
+        cancel.Size = Size(90, 26)
+        cancel.Location = Point(270, y + 10)
+        cancel.DialogResult = DialogResult.Cancel
+        self.Controls.Add(cancel)
+
+        self.AcceptButton = ok
+        self.CancelButton = cancel
+        self.ClientSize = Size(400, y + 52)
+
+    def _add_label(self, text, y):
+        label = Label()
+        label.Text = text
+        label.Location = Point(12, y)
+        label.AutoSize = True
+        self.Controls.Add(label)
+        return y + 20
+
+    def _add_combo(self, key, caption, options, default_key, y):
+        y = self._add_label(caption, y)
+        combo = ComboBox()
+        combo.DropDownStyle = ComboBoxStyle.DropDownList
+        combo.Location = Point(12, y)
+        combo.Size = Size(370, 24)
+        for display in options.keys():
+            combo.Items.Add(display)
+        combo.SelectedItem = default_key
+        self.Controls.Add(combo)
+        self._combos[key] = (combo, options)
+        return y + 32
+
+    def _add_text(self, key, caption, default, y):
+        y = self._add_label(caption, y)
+        box = TextBox()
+        box.Text = default
+        box.Location = Point(12, y)
+        box.Size = Size(370, 24)
+        self.Controls.Add(box)
+        self._texts[key] = box
+        return y + 32
+
+    def _add_check(self, key, caption, default, y):
+        box = CheckBox()
+        box.Text = caption
+        box.Checked = default
+        box.Location = Point(12, y)
+        box.Size = Size(370, 22)
+        self.Controls.Add(box)
+        self._checks[key] = box
+        return y + 26
+
+    def _on_ok(self, sender, args):
+        """Snapshot control state before the form closes."""
+        values = {}
+        for key, (combo, options) in self._combos.items():
+            # Map the displayed label back to the OrderedDict's value.
+            values[key] = options.get(combo.SelectedItem)
+        for key, box in self._texts.items():
+            values[key] = box.Text
+        for key, box in self._checks.items():
+            values[key] = box.Checked
+        self.values = values
+
+
+def _show_options_dialog():
+    """///Summary: Show the options dialog. Returns an rpw-style dict, or None."""
+    dialog = _ArrayOptionsDialog()
+    if dialog.ShowDialog() != DialogResult.OK:
+        return None
+    return dialog.values
+
+
 def _collect_user_options():
     while True:
-        components = [
-            Label("Path Type"),
-            ComboBox("path_type", PATH_OPTIONS, default="Detail / Model Line"),
-            Separator(),
-            Label("Placement Mode"),
-            ComboBox("mode", MODE_OPTIONS, default="By Count"),
-            Label("Total Count"),
-            TextBox("count", Text="5"),
-            Label("Spacing (project units)"),
-            TextBox("spacing", Text="5.0"),
-            CheckBox("fill_even", "Fill path evenly (spacing mode)", default=False),
-            Separator(),
-            CheckBox("include_start", "Include path start", default=True),
-            CheckBox("include_end", "Include path end", default=True),
-            CheckBox("align_to_path", "Align instances to path direction", default=True),
-            Label("Alignment Axis"),
-            ComboBox("axis_mode", AXIS_OPTIONS, default="Family X axis"),
-            CheckBox("create_group", "Group resulting elements", default=True),
-            Separator(),
-            Button("Place Instances"),
-        ]
-
-        dialog = FlexForm("Array On Path", components)
-        dialog.show()
-        values = dialog.values
+        values = _show_options_dialog()
         if not values:
             return None
 
@@ -129,26 +238,26 @@ def _collect_user_options():
             try:
                 count_val = int(raw_count)
             except ValueError:
-                forms.alert(
+                joolslib.alert(
                     "Enter an integer greater than zero for count.", title="Array On Path"
                 )
                 continue
             if count_val <= 0:
-                forms.alert("Count must be greater than zero.", title="Array On Path")
+                joolslib.alert("Count must be greater than zero.", title="Array On Path")
                 continue
         else:
             raw_spacing = (values.get("spacing") or "").strip()
             try:
                 spacing_val = float(raw_spacing)
             except ValueError:
-                forms.alert("Enter a numeric spacing value.", title="Array On Path")
+                joolslib.alert("Enter a numeric spacing value.", title="Array On Path")
                 continue
             if spacing_val <= 0:
-                forms.alert("Spacing must be greater than zero.", title="Array On Path")
+                joolslib.alert("Spacing must be greater than zero.", title="Array On Path")
                 continue
             spacing_val = _to_internal_length(spacing_val)
             if spacing_val <= TOL:
-                forms.alert("Spacing must be greater than zero.", title="Array On Path")
+                joolslib.alert("Spacing must be greater than zero.", title="Array On Path")
                 continue
 
         include_start = bool(values.get("include_start"))

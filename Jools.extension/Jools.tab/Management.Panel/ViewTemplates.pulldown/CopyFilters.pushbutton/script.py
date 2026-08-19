@@ -1,3 +1,4 @@
+#! python3
 # -*- coding: utf-8 -*-
 import clr
 
@@ -9,11 +10,15 @@ clr.AddReference("PresentationCore")
 clr.AddReference("System.Xaml")
 clr.AddReference("WindowsBase")
 
+import System # type: ignore
 from Autodesk.Revit import DB, UI # type: ignore
 from System.Windows import Window, WindowStartupLocation # type: ignore
 from System.Windows.Markup import XamlReader # type: ignore
 from System.IO import StringReader # type: ignore
 from System.Collections.Generic import List # type: ignore
+import joolslib          # Jools.extension/lib, see CLAUDE.md section 6a
+joolslib.install_events_shim()   # must precede any pyrevit import
+
 from pyrevit import script
 
 # Use __revit__ directly for IronPython stability
@@ -74,8 +79,12 @@ class CopyFiltersWindow:
         self.btn_copy = self.window.FindName("BtnCopy")
         self.btn_cancel = self.window.FindName("BtnCancel")
         
-        # Populate documents
-        self.source_combo.ItemsSource = open_docs
+        # Populate documents. ItemsSource needs a .NET collection: pythonnet
+        # will not convert a Python list to IEnumerable (CLAUDE.md section 3).
+        source_net_docs = List[System.Object]()
+        for d in open_docs:
+            source_net_docs.Add(d)
+        self.source_combo.ItemsSource = source_net_docs
         self.source_combo.SelectionChanged += self.on_source_changed
         
         self.btn_copy.Click += self.on_copy_click
@@ -89,8 +98,11 @@ class CopyFiltersWindow:
         self.selected_source_doc = self.source_combo.SelectedItem
         if self.selected_source_doc:
             collector = DB.FilteredElementCollector(self.selected_source_doc).OfClass(DB.ParameterFilterElement)
-            filters = [FilterItem(f) for f in collector]
-            self.filter_list.ItemsSource = sorted(filters, key=lambda x: x.Name)
+            filters = sorted([FilterItem(f) for f in collector], key=lambda x: x.Name)
+            filter_net_list = List[System.Object]()
+            for f in filters:
+                filter_net_list.Add(f)
+            self.filter_list.ItemsSource = filter_net_list
 
     def on_copy_click(self, sender, e):
         if not self.selected_source_doc:

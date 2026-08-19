@@ -5,6 +5,9 @@ import clr
 clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
 
+import joolslib          # Jools.extension/lib, see CLAUDE.md section 6a
+joolslib.install_events_shim()   # must precede any pyrevit import
+
 from pyrevit import script
 from Autodesk.Revit import DB # type: ignore
 

@@ -16,6 +16,7 @@
     "Jools.extension/Jools.tab",
     "Jools.extension/bin",
     "Jools.extension/hooks",
+    "Jools.extension/lib",
     "tools"
   ],
 
@@ -42,6 +43,7 @@
 
   // Real source only. Never put typings here — that promotes stubs to user code.
   "extraPaths": [
+    "Jools.extension/lib",
     "C:/Users/rjohnston/AppData/Roaming/pyRevit-Master/pyrevitlib",
     "C:/Users/rjohnston/AppData/Roaming/pyRevit-Master/site-packages"
   ],

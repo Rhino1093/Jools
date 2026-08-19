@@ -154,6 +154,11 @@ COLOR_NAMES = {
 
 class UserInputForm(Form):
     def __init__(self, text_type_names):
+
+        # pythonnet does not run the .NET base constructor implicitly the way
+        # IronPython did; without it the control is uninitialised and the first
+        # `self.Text = ...` raises NullReferenceException.
+        super().__init__()
         self.Text   = "Fill Pattern and Filled Region Productivity Suite"
         self.Width  = 260
         self.Height = 480

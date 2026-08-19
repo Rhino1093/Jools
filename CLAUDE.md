@@ -16,7 +16,7 @@ Do not guess these. They were read off this machine.
 |---|---|
 | pyRevit | 6.5.4 (`%APPDATA%\pyRevit-Master`) |
 | CPython engine | 3.12.3 (`bin/cengines/CPY3123`), set via `cpyengine = 3123` |
-| IronPython engines | 2.7.12 (default), 3.4.2 — both present but **not used by this repo** |
+| IronPython engines | 2.7.12 (default), 3.4.2 — present, but **no script here uses them** |
 | Revit installed | 2019 – 2026 |
 | Extension registered as | `userextensions` → this repo root |
 | Local stubs | `Jools.extension/typings/RVT 20…25` (**no RVT 26 stubs**) |
@@ -35,12 +35,17 @@ pyRevit resolves the engine with a literal substring test
 #! python3        # ✅ only accepted form
 ```
 
+**Every script in this extension is CPython 3. There are no exceptions**, so a
+non-`#! python3` first line is always a bug, never a deliberate choice. IronPython
+is off the table entirely: `pyrevit.forms` has no CPython backend (section 2.2) and
+`rpw` cannot even import (section 2.6).
+
 Anything else silently falls back to **IronPython 2.7.12**:
 
 ```python
-# !python3        # ❌ space in wrong place — 4 files in this repo have this bug
+# !python3        # ❌ space in wrong place — the bug that killed 4 tools here
 #!python3         # ❌ missing space
-#! python          # ❌ explicitly IronPython
+#! python          # ❌ IronPython — no longer used anywhere in this repo
 (no first line)   # ❌ IronPython
 ```
 
@@ -86,8 +91,10 @@ _mock._HANDLER = None
 sys.modules['pyrevit.revit.events'] = _mock
 ```
 
-Five scripts here already carry it. If a `#! python3` tool dies on its import block
-with no line of your own code in the trace, this is why.
+Call `joolslib.install_events_shim()` rather than pasting the block (section 6a).
+Every script here now installs it one way or the other; a few older ones still
+carry the inline copy above, which is equivalent. If a tool dies on its import
+block with no line of your own code in the trace, this is why.
 
 ### 2.4 Never read an ElementId's integer directly — use `eid_int()`
 
@@ -100,8 +107,8 @@ pyRevit is attached to **Revit 2022, 2023, 2024, 2025 and 2026** on this machine
 | 2024, 2025 | ✅ deprecated | ✅ |
 | 2026 | ❌ **removed** | ✅ |
 
-So `.IntegerValue` breaks 2026 and `.Value` breaks 2022/2023. Use the compat
-helper, which five scripts already carry — copy it in verbatim:
+So `.IntegerValue` breaks 2026 and `.Value` breaks 2022/2023. Use `joolslib.eid_int()`
+(section 6a). A few older scripts carry this inline copy, which is identical:
 
 ```python
 def eid_int(element_id):
@@ -142,6 +149,64 @@ doc = __revit__.ActiveUIDocument.Document          # ✅ pyRevit
 Note: `.dyn` files under a `.pushbutton` folder are fine — pyRevit runs those through
 Dynamo itself. This rule is only about `.py` scripts.
 
+
+### 2.6 `rpw` (Revit Python Wrapper) cannot be used
+
+`rpw` is IronPython-era and will not import on pyRevit's CPython 3.12.3 engine:
+`rpw/utils/sphinx_compat.py` does `import imp`, and **`imp` was removed in Python
+3.12**. It is on the critical path (`rpw.utils.dotnet` imports it), so every
+`from rpw... import` fails.
+
+```python
+from rpw.ui.forms import FlexForm      # ModuleNotFoundError: No module named 'imp'
+```
+
+`ArrayOnPath` used `FlexForm` for its options dialog; it now builds a WinForms
+dialog directly. Use that as the pattern, or `joolslib.ask_for_string` for a
+single value.
+
+
+### 2.7 Implementing a .NET interface needs `__namespace__`
+
+Any Python class implementing a .NET interface — `ISelectionFilter` above all,
+since every `PickObject` filter uses it — must declare `__namespace__`. pythonnet
+uses it to emit the proxy type. IronPython never needed it, so ported code omits it
+and fails at **instantiation**, not import:
+
+```
+interface takes exactly one argument
+```
+
+**The value must be unique per execution, not a fixed string.** pythonnet emits a
+proxy type `<__namespace__>.<ClassName>` into a dynamic assembly that lives for the
+whole Revit session, so a literal name works on the first click and then fails:
+
+```
+Duplicate type name within an assembly
+```
+
+```python
+_NS = joolslib.unique_namespace("ArrayOnPath")   # module level, once per run
+
+
+class FamilyInstanceFilter(UI.Selection.ISelectionFilter):
+    __namespace__ = _NS
+
+    def AllowElement(self, element):
+        return isinstance(element, DB.FamilyInstance)
+
+    def AllowReference(self, reference, position):
+        return False
+```
+
+One `_NS` can be shared by every filter in a tool — the class names already differ.
+`joolslib.unique_namespace()` wraps `EXEC_PARAMS.exec_id`, the per-run id the C#
+executor injects; pyRevit uses the same value in `pyrevit/revit/events.py`
+(`FuncAsEventHandler.__namespace__`), which is also why section 2.3's shim exists.
+
+The validator flags a missing value as `interface-no-namespace` and a literal one
+as `namespace-not-unique`.
+
 ---
 
 ## 3. UI — the CPython-safe toolkit
@@ -165,6 +230,36 @@ Rules:
   `== DialogResult.OK`. Do not mix the two conventions in one script.
 - Keep XAML as a triple-quoted string inside `script.py`. Self-contained beats tidy.
 
+### Python lists never cross into .NET under CPython
+
+IronPython silently converts a Python `list` to `System.Collections.IEnumerable`.
+**pythonnet does not.** Assigning one to a WPF property raises:
+
+```
+'list' value cannot be converted to System.Collections.IEnumerable
+```
+
+This is the single trap that breaks an otherwise-clean IronPython-to-CPython
+conversion, because it is invisible until the window opens.
+
+```python
+combo.ItemsSource = open_docs                      # fails under #! python3
+combo.ItemsSource = sorted(items, key=...)         # fails
+
+net_items = List[System.Object]()                  # correct
+for d in open_docs:
+    net_items.Add(d)
+combo.ItemsSource = net_items
+```
+
+Needs `import System` and `from System.Collections.Generic import List`.
+`CopyViewTemplatesFromOtherProjects` and `CopyFiltersBetweenTemplates` are the
+reference implementations. The validator flags this as `python-list-to-dotnet`.
+
+Binding a WPF template to a **plain Python class** (`{Binding Name}` against a
+`class FilterItem`) does work under pyRevit's pythonnet — only the collection
+itself has to be a .NET type.
+
 ---
 
 ## 4. Canonical script template
@@ -173,13 +268,8 @@ Rules:
 #! python3
 """One-line description of what this tool does."""
 
-import sys
-from types import ModuleType
-
-# See CLAUDE.md §2.3 — must precede all pyrevit imports.
-_mock = ModuleType('pyrevit.revit.events')
-_mock._HANDLER = None
-sys.modules['pyrevit.revit.events'] = _mock
+import joolslib          # Jools.extension/lib, see section 6a
+joolslib.install_events_shim()   # must precede every pyrevit import (section 2.3)
 
 import clr  # type: ignore
 clr.AddReference("RevitAPI")     # type: ignore
@@ -258,10 +348,12 @@ Jools.extension/
         bundle.yaml                # title, tooltip, help_url
         icon.png
         script.py
-  lib/                             # auto-added to sys.path — shared helpers go here
-  bin/
-    active hooks/                  # hooks currently loaded
-    inactive hooks/                # disabled, kept for reference
+  lib/
+    joolslib.py                    # auto-added to sys.path; see section 6a
+  bin/                             # loose assets
+  hooks/                           # pyRevit loads event hooks from HERE and
+                                   # nowhere else; currently empty (the old
+                                   # ones are in _deprecated/hooks/)
   typings/                         # stubs, gitignored except the submodule
 ```
 
@@ -271,6 +363,31 @@ Folder names may contain spaces (`BIM Management.pulldown`) — quote paths in s
 `bundle.yaml` keys used here: `title`, `tooltip`, `help_url`, `layout`, `hyperlink`,
 `description`, `author`. Adding a new panel means editing `Jools.tab/bundle.yaml` too,
 or it won't appear.
+
+---
+
+## 6a. Shared library (`Jools.extension/lib/joolslib.py`)
+
+pyRevit puts `<extension>/lib` on `sys.path` automatically, so any script can
+`import joolslib` with no path setup. Use it for **new** tools:
+
+| Helper | Replaces | Notes |
+|---|---|---|
+| `install_events_shim()` | the 12-line sys.modules block | call before any pyrevit import |
+| `eid_int(element_id)` | `.IntegerValue` / `.Value` | Revit 2022-2026 safe (section 2.4) |
+| `unique_namespace(prefix)` | a literal `__namespace__` | per-run value for .NET interface impls (section 2.7) |
+| `alert(msg, title)` | `forms.alert` | TaskDialog |
+| `ask_for_string(prompt, default, title)` | `forms.ask_for_string` | WinForms, returns None on cancel |
+| `OutputProgress(output, title, total)` | `forms.ProgressBar` | context manager, `.cancelled`, `.update_progress()` |
+
+`joolslib` must never import `pyrevit` at module scope — `install_events_shim()`
+has to run before the first pyrevit import, which is impossible if importing
+joolslib pulls pyrevit in first. Helpers needing pyrevit take it as an argument
+(`OutputProgress` takes the object from `script.get_output()`).
+
+Existing scripts keep their inline copies of these helpers. Migrate one when you
+next edit it, not as a sweep — a bad `sys.path` would take out every migrated
+tool at once.
 
 ---
 
@@ -312,13 +429,17 @@ In VS Code: **Ctrl+Shift+B**, or Terminal → Run Task → *Validate pyRevit ext
 Findings land in the Problems panel. Exit code is 1 on any error, so it also works
 as a pre-commit hook.
 
-Then check by hand:
-1. Line 1 is exactly `#! python3`.
-2. No `pyrevit.forms` import.
-3. Events shim precedes all `pyrevit` imports.
-4. No `IntegerValue`, no Dynamo imports.
-5. Every early-exit path tells the user what to do next.
-6. Model changes are inside a transaction.
+A pre-commit hook runs the same check and blocks the commit on any error:
+`git config core.hooksPath tools/githooks` (once per clone), bypass with
+`git commit --no-verify`.
+
+Then check by hand, since the validator cannot see these:
+1. Every early-exit path tells the user what to do next.
+2. Model changes are inside a transaction.
+3. No Python list is handed to a .NET API or WPF property (section 3) — the
+   validator only catches the obvious `ItemsSource =` form.
+4. Anything with a UI has actually been run in Revit. Static checks did not
+   catch the `ItemsSource` bug in CopyFilters; a single click did.
 
 ---
 

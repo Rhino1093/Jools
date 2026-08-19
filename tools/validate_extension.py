@@ -142,17 +142,19 @@ def check_shebang(path, text, findings):
         return "ironpython"
 
     if IRONPYTHON_SHEBANG.match(first) or first.startswith("#!"):
+        # No exceptions remain: every script in this extension is CPython 3.
         findings.append(
             Finding(
                 ERROR,
                 path,
                 1,
                 "shebang-ironpython",
-                "Line 1 is {!r}, selecting IronPython. This repo standardized on "
-                "CPython 3 (CLAUDE.md \u00a72.1); pyrevit.forms calls must be "
-                "replaced when converting.".format(first),
-                fix="Replace line 1 with exactly: {}, then port forms.* per "
-                    "CLAUDE.md \u00a73.".format(CPYTHON_HASHBANG),
+                "Line 1 is {!r}, selecting IronPython. Every script in this "
+                "extension runs on CPython 3 (CLAUDE.md section 2.1) and there are no "
+                "exceptions left.".format(first),
+                fix="Replace line 1 with {}, then use joolslib for alert / "
+                    "ask_for_string / OutputProgress (CLAUDE.md section 6a).".format(
+                        CPYTHON_HASHBANG),
             )
         )
         return "ironpython"
@@ -214,7 +216,7 @@ def check_forms(path, text, engine, findings):
             "_cpy backend, whose stubs and module __getattr__ raise "
             "PyRevitCPythonNotSupported for every symbol, forms.alert included.",
             fix="Use TaskDialog for alerts, Microsoft.Win32 dialogs for files, "
-                "output.update_progress() for progress (CLAUDE.md \u00a73).",
+                "output.update_progress() for progress (CLAUDE.md section 3).",
         )
     )
 
@@ -241,7 +243,11 @@ def check_events_shim(path, text, engine, findings):
     if not first_import:
         return
 
-    shim = re.search(r"sys\.modules\[['\"]pyrevit\.revit\.events['\"]\]", text)
+    # Either the inline sys.modules block or the joolslib helper counts.
+    shim = re.search(
+        r"sys\.modules\[['\"]pyrevit\.revit\.events['\"]\]"
+        r"|install_events_shim\s*\(",
+        text)
     if not shim:
         findings.append(
             Finding(
@@ -252,7 +258,7 @@ def check_events_shim(path, text, engine, findings):
                 "Imports pyrevit without the pyrevit.revit.events shim. Under "
                 "CPython this can fail with 'interface takes exactly one argument' "
                 "before any of your code runs.",
-                fix="Add the shim from CLAUDE.md \u00a72.3 above this import.",
+                fix="Add the shim from CLAUDE.md section 2.3 above this import.",
             )
         )
     elif shim.start() > first_import.start():
@@ -328,6 +334,147 @@ def check_nonexistent_calls(path, text, findings):
             )
 
 
+# A Python sequence assigned straight to a .NET collection property. IronPython
+# converts these silently; pythonnet raises
+# "'list' value cannot be converted to System.Collections.IEnumerable".
+DOTNET_COLLECTION_PROPS = ("ItemsSource", "DataContext")
+PY_SEQUENCE_RHS = re.compile(
+    r"\.(" + "|".join(DOTNET_COLLECTION_PROPS) + r")\s*=\s*"
+    r"(\[|sorted\s*\(|list\s*\(|map\s*\(|filter\s*\(|reversed\s*\()"
+)
+
+
+def check_dotnet_collections(path, text, engine, findings):
+    """Python lists handed to WPF properties fail only under CPython."""
+    if engine != "cpython":
+        return
+    for hit in PY_SEQUENCE_RHS.finditer(text):
+        findings.append(
+            Finding(
+                ERROR,
+                path,
+                line_of(text, hit.start()),
+                "python-list-to-dotnet",
+                "Assigns a Python sequence to .{}. pythonnet will not convert it "
+                "to System.Collections.IEnumerable, unlike IronPython.".format(
+                    hit.group(1)),
+                fix="Build a .NET collection first:\n"
+                    "          items = List[System.Object]()\n"
+                    "          for x in values: items.Add(x)\n"
+                    "          widget.{} = items".format(hit.group(1)),
+            )
+        )
+
+
+def check_lib_import(path, text, root, findings):
+    """A script importing joolslib is useless if the module is not where pyRevit looks."""
+    if not re.search(r"^\s*import\s+joolslib", text, re.M):
+        return
+    if not os.path.isfile(os.path.join(root, "lib", "joolslib.py")):
+        findings.append(
+            Finding(
+                ERROR,
+                path,
+                1,
+                "missing-lib",
+                "Imports joolslib, but <extension>/lib/joolslib.py does not exist. "
+                "pyRevit only adds <extension>/lib to sys.path.",
+                fix="Restore Jools.extension/lib/joolslib.py, then Reload pyRevit.",
+            )
+        )
+
+
+# A Python class implementing a .NET interface needs __namespace__ so pythonnet can
+# emit a proxy type. IronPython never required it; CPython fails at instantiation
+# with "interface takes exactly one argument".
+DOTNET_INTERFACE_BASE = re.compile(
+    r"^class\s+(\w+)\s*\(\s*((?:[\w.]+\.)?I[A-Z]\w*)\s*\)\s*:", re.M)
+
+
+def check_dotnet_interfaces(path, text, engine, findings):
+    """Implementing a .NET interface without __namespace__ fails under CPython."""
+    if engine != "cpython":
+        return
+    for match in DOTNET_INTERFACE_BASE.finditer(text):
+        cls, base = match.group(1), match.group(2)
+        # Scan the class body up to the next top-level statement.
+        body_start = text.index("\n", match.end()) + 1
+        nxt = re.search(r"^\S", text[body_start:], re.M)
+        body = text[body_start:body_start + (nxt.start() if nxt else len(text))]
+        # Must be a real assignment. A bare substring match would be satisfied by
+        # the explanatory comment that usually sits above it.
+        ns = re.search(r"^\s+__namespace__\s*=\s*(.+)$", body, re.M)
+        if ns:
+            # A string literal is per-session constant, so the emitted proxy type
+            # collides with "Duplicate type name within an assembly" on the second
+            # run. It must be derived per execution.
+            if re.match(r"""^['"]""", ns.group(1).strip()):
+                findings.append(
+                    Finding(
+                        ERROR,
+                        path,
+                        line_of(text, match.start()),
+                        "namespace-not-unique",
+                        "class {} sets a literal __namespace__. pythonnet emits the "
+                        "proxy type into an assembly that lives for the whole Revit "
+                        "session, so the second run raises \"Duplicate type name "
+                        "within an assembly\".".format(cls),
+                        fix="Derive it per execution: "
+                            "_NS = joolslib.unique_namespace(\"ToolName\") at module "
+                            "level, then __namespace__ = _NS.",
+                    )
+                )
+            continue
+        findings.append(
+            Finding(
+                ERROR,
+                path,
+                line_of(text, match.start()),
+                "interface-no-namespace",
+                "class {} implements the .NET interface {} but declares no "
+                "__namespace__. pythonnet raises \"interface takes exactly one "
+                "argument\" when it is instantiated.".format(cls, base),
+                fix='Add as the first line of the class body: '
+                    '__namespace__ = "Jools{}"'.format(cls),
+            )
+        )
+
+
+# Subclassing a .NET type (Form, Window, Control) requires calling the base
+# constructor explicitly. IronPython did it implicitly; pythonnet does not, and the
+# first property assignment then raises NullReferenceException.
+DOTNET_SUBCLASS = re.compile(
+    r"^class\s+(\w+)\s*\(\s*([\w.]*(?:Form|Window|UserControl|Control))\s*\)\s*:", re.M)
+
+
+def check_dotnet_base_init(path, text, engine, findings):
+    """A .NET subclass whose __init__ never calls the base constructor."""
+    if engine != "cpython":
+        return
+    for match in DOTNET_SUBCLASS.finditer(text):
+        cls, base = match.group(1), match.group(2)
+        body_start = text.index(chr(10), match.end()) + 1
+        nxt = re.search(r"^\S", text[body_start:], re.M)
+        body = text[body_start:body_start + (nxt.start() if nxt else len(text))]
+        if not re.search(r"^\s+def __init__", body, re.M):
+            continue
+        if re.search(r"^\s+(super\(|[\w.]*(?:Form|Window|Control)\.__init__)", body, re.M):
+            continue
+        findings.append(
+            Finding(
+                ERROR,
+                path,
+                line_of(text, match.start()),
+                "dotnet-base-init",
+                "class {} subclasses .NET {} and defines __init__ without calling "
+                "the base constructor. pythonnet leaves the control uninitialised "
+                "and the first property assignment raises "
+                "NullReferenceException.".format(cls, base),
+                fix="Make super().__init__() the first statement of __init__.",
+            )
+        )
+
+
 def check_transactions(path, text, findings):
     """Model writes outside a transaction throw at runtime; flag the obvious cases."""
     writes = re.search(
@@ -389,10 +536,24 @@ def run(root):
         if not code_lines:
             continue
 
-        engine = check_shebang(rel, text, findings)
+        # Modules under lib/ are imported by scripts, never launched by pyRevit,
+        # so they select no engine and must not carry a shebang. They still get
+        # every content check below; they just inherit the caller's engine, and
+        # this repo's callers are CPython 3.
+        is_library = ("lib" + os.sep) in rel or rel.startswith("lib" + os.sep)
+
+        if is_library:
+            engine = "cpython"
+        else:
+            engine = check_shebang(rel, text, findings)
+            check_events_shim(rel, text, engine, findings)
+
         check_syntax(rel, text, engine, findings)
         check_forms(rel, text, engine, findings)
-        check_events_shim(rel, text, engine, findings)
+        check_dotnet_collections(rel, text, engine, findings)
+        check_lib_import(rel, text, root, findings)
+        check_dotnet_interfaces(rel, text, engine, findings)
+        check_dotnet_base_init(rel, text, engine, findings)
         check_removed_api(rel, text, findings)
         check_dynamo(rel, text, findings)
         check_nonexistent_calls(rel, text, findings)
@@ -407,7 +568,12 @@ def report(findings, quiet):
     """Print a grouped, human-readable report."""
     shown = [f for f in findings if not (quiet and f.level == WARN)]
     if not shown:
-        print("OK - no problems found.")
+        # Don't claim a clean bill of health when --quiet is hiding warnings.
+        hidden = sum(1 for f in findings if f.level == WARN)
+        if hidden:
+            print("OK - no errors ({} warning(s) hidden by --quiet).".format(hidden))
+        else:
+            print("OK - no problems found.")
         return
 
     current = None

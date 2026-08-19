@@ -10,14 +10,21 @@ clr.AddReference("RevitAPIUI")
 clr.AddReference("PresentationFramework")
 clr.AddReference("PresentationCore")
 clr.AddReference('System.Windows.Forms')
+clr.AddReference('System.Drawing')
 
 from Autodesk.Revit import DB # type: ignore
 from Autodesk.Revit.UI import TaskDialog # type: ignore
-from System.Windows.Forms import FolderBrowserDialog, DialogResult # type: ignore
+from System.Windows.Forms import (FolderBrowserDialog, DialogResult, Form, Label,
+                                  TextBox, Button, FormStartPosition,
+                                  FormBorderStyle) # type: ignore
+from System.Drawing import Size, Point # type: ignore
 from System import Guid # type: ignore
 
 # Load pyRevit framework
-from pyrevit import script, forms
+import joolslib          # Jools.extension/lib, see CLAUDE.md section 6a
+joolslib.install_events_shim()   # must precede any pyrevit import
+
+from pyrevit import script
 
 # Constants
 ACCOUNT_ID = "3dd53f14-c0db-4114-94e6-8a8097c16177"
@@ -58,10 +65,61 @@ def normalize_name(name):
     name = re.sub(r'\(\d+\)$', '', name)
     return name.strip()
 
+
+def ask_for_string(prompt, default="", title="Input"):
+    """///Summary: Single-line text prompt. Replaces forms.ask_for_string.
+
+    pyrevit.forms.ask_for_string raises PyRevitCPythonNotSupported under
+    `#! python3` (CLAUDE.md 2.2). Built on WinForms to match the
+    FolderBrowserDialog already used here, so one DialogResult convention
+    applies throughout this script.
+
+    Returns the entered text, or None if the user cancels.
+    """
+    form = Form()
+    form.Text = title
+    form.ClientSize = Size(620, 120)
+    form.FormBorderStyle = FormBorderStyle.FixedDialog
+    form.StartPosition = FormStartPosition.CenterScreen
+    form.MinimizeBox = False
+    form.MaximizeBox = False
+
+    label = Label()
+    label.Text = prompt
+    label.Location = Point(12, 12)
+    label.AutoSize = True
+    form.Controls.Add(label)
+
+    textbox = TextBox()
+    textbox.Text = default or ""
+    textbox.Location = Point(12, 38)
+    textbox.Size = Size(596, 24)
+    form.Controls.Add(textbox)
+
+    ok = Button()
+    ok.Text = "OK"
+    ok.DialogResult = DialogResult.OK
+    ok.Location = Point(452, 78)
+    form.Controls.Add(ok)
+
+    cancel = Button()
+    cancel.Text = "Cancel"
+    cancel.DialogResult = DialogResult.Cancel
+    cancel.Location = Point(533, 78)
+    form.Controls.Add(cancel)
+
+    form.AcceptButton = ok
+    form.CancelButton = cancel
+
+    if form.ShowDialog() != DialogResult.OK:
+        return None
+    return textbox.Text
+
+
 def main():
     # 1. Setup
     default_url = "https://acc.autodesk.com/docs/files/projects/947fcf1b-06b3-4fd2-9663-66efca3906cc?folderUrn=urn%3Aadsk.wipprod%3Afs.folder%3Aco.56KXdIDQQzGEMyctS4O2SQ&viewModel=detail&moduleId=folders"
-    url = forms.ask_for_string(default=default_url, title="Upload & Relink", prompt="Paste ACC Folder URL:")
+    url = ask_for_string("Paste ACC Folder URL:", default=default_url, title="Upload & Relink")
     if not url: return
 
     project_id_str, folder_id = parse_acc_url(url)
