@@ -8,8 +8,8 @@ clr.AddReference("RevitAPI")     # type: ignore
 clr.AddReference("RevitAPIUI")   # type: ignore
 
 from Autodesk.Revit import DB  # type: ignore
-from Autodesk.Revit.UI import TaskDialog  # type: ignore
-from Autodesk.Revit.UI.Selection import ObjectType  # type: ignore
+from Autodesk.Revit.UI import TaskDialog, SelectionUIOptions  # type: ignore
+from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter  # type: ignore
 from Autodesk.Revit.Exceptions import OperationCanceledException  # type: ignore
 
 import joolslib          # Jools.extension/lib, see CLAUDE.md section 6a
@@ -71,12 +71,14 @@ def load_settings():
     script.get_config() keys off the command name, which is the same for
     script.py and config.py in one bundle, so both see the same section.
     """
-    settings = {"offset_ft": DEFAULT_OFFSET_FT, "view_type_name": ""}
+    settings = {"offset_ft": DEFAULT_OFFSET_FT, "view_type_name": "",
+                "links_first": True}
     try:
         config = script.get_config()
         settings["offset_ft"] = float(
             config.get_option("offset_ft", DEFAULT_OFFSET_FT))
         settings["view_type_name"] = config.get_option("view_type_name", "")
+        settings["links_first"] = bool(config.get_option("links_first", True))
     except Exception as ex:
         logger.debug("could not read saved settings: %s", ex)
     return settings
@@ -304,9 +306,18 @@ def build_section_box(picked, view, click, offset, host_doc):
 
     # Candidate view directions: perpendicular to the element's own axis when it
     # has one, otherwise the four world-aligned bounding box faces.
-    axis = element_axis(picked)
-    if axis is not None:
-        perpendicular = _flatten(DB.XYZ.BasisZ.CrossProduct(axis))
+    # Two different axes, and conflating them silently mis-sizes the section.
+    # `curve_axis` is the element's location line and is the only thing that
+    # licenses measuring length off that line. `orient_axis` is what the section
+    # runs parallel to: the edge or face actually clicked, falling back to the
+    # location line. Picking the END edge of a wall, for instance, orients the
+    # section across the wall while its length still has to come from the
+    # bounding box, not from the location line projected onto a perpendicular.
+    curve_axis = element_axis(picked)
+    orient_axis = picked.axis_hint or curve_axis
+
+    if orient_axis is not None:
+        perpendicular = _flatten(DB.XYZ.BasisZ.CrossProduct(orient_axis))
         candidates = [perpendicular, perpendicular.Negate()]
     else:
         candidates = [DB.XYZ.BasisX, DB.XYZ.BasisX.Negate(),
@@ -326,9 +337,10 @@ def build_section_box(picked, view, click, offset, host_doc):
     # Extent along the section line. For an element with a location line the
     # line itself is the honest length; the world bounding box of an angled wall
     # is its diagonal and would overshoot.
-    along = _extent_along(picked, corners, centre, basis_x, axis)
+    along = _extent_along(picked, corners, centre, basis_x, curve_axis)
     across = _extent_along(picked, corners, centre, basis_z, None)
-    across = _wall_thickness_override(picked.element, across)
+    across = _wall_thickness_override(
+        picked.element, across, basis_z, curve_axis)
 
     half_width = _pad(along) + offset
     half_depth = _pad(across) + offset
@@ -398,14 +410,20 @@ def _extent_along(picked, corners, centre, direction, axis):
     return max(abs(min(spans)), abs(max(spans)))
 
 
-def _wall_thickness_override(element, across):
+def _wall_thickness_override(element, across, view_dir, curve_axis):
     """///Summary: A wall's real thickness beats its world bounding box.
 
     An angled wall's bounding box is the diagonal box around it, so measuring
     depth off the box makes the section deeper than the wall. Wall.Width is the
     actual thickness.
+
+    Only when the section is looking at the wall's FACE, though. Picking an edge
+    at the END of a wall aims the section along its length, and clamping that
+    depth to the thickness would cut a 10 ft wall down to a 6 in. deep section.
     """
     if not isinstance(element, DB.Wall):
+        return across
+    if curve_axis is not None and abs(view_dir.DotProduct(curve_axis)) > 0.1:
         return across
     try:
         return min(across, element.Width / 2.0)
@@ -445,14 +463,161 @@ class PickedObject(object):
     host element that transform is the identity and nothing moves.
     """
 
-    def __init__(self, element, transform, link_name=None):
+    def __init__(self, element, transform, link_name=None, axis_hint=None):
         self.element = element
         self.transform = transform
         self.link_name = link_name
+        # Names of the selection toggles that had to be switched on for the
+        # pick to be possible at all. Worth reporting: they are the whole
+        # difference between linked objects being clickable and not.
+        self.relaxed_toggles = []
+        # Horizontal direction taken from the exact edge or face that was
+        # clicked, in host coordinates. None when the pick had no usable
+        # geometry behind it, which is common in plan; the element's own axis
+        # covers that case.
+        self.axis_hint = axis_hint
 
     @property
     def is_linked(self):
         return self.link_name is not None
+
+
+# pythonnet emits a proxy type <__namespace__>.<ClassName> into an assembly that
+# lives for the whole Revit session, so this has to be unique per run or the
+# second click of the button dies on "Duplicate type name" (CLAUDE.md 2.7).
+_NS = joolslib.unique_namespace("SectionByObject")
+
+
+class AnyGeometryFilter(ISelectionFilter):
+    """///Summary: Permit host geometry and geometry inside Revit links alike.
+
+    An ObjectType.Edge pick with no filter never offers linked geometry — hover a
+    link and nothing highlights. Allowing RevitLinkInstance through AllowElement
+    is what makes Revit generate references that reach into the link, and
+    AllowReference then accepts the individual edge or cut face inside it.
+    """
+
+    __namespace__ = _NS
+
+    def AllowElement(self, element):
+        return True
+
+    def AllowReference(self, reference, position):
+        return True
+
+
+class PickingRelaxed(object):
+    """///Summary: Lift the selection toggles that hide linked geometry, for one pick.
+
+    Two of Revit's status-bar toggles can each independently make a linked object
+    unclickable, and an API PickObject obeys both exactly as clicking by hand
+    does:
+
+        Select links   while off, "users cannot directly select link instances
+                       or elements within them in the canvas".
+        Select pinned  while off, "the user cannot select most pinned elements
+                       in canvas" — and links are pinned as routine practice.
+
+    Both are switched on for the duration of the pick and put back afterwards,
+    since they are usually off on purpose: to stop links being nudged while
+    drafting. Failing to read or set them is not fatal; host picking still works.
+    """
+
+    TOGGLES = ("SelectLinks", "SelectPinned")
+
+    def __init__(self):
+        self._options = None
+        self._previous = {}
+
+    @property
+    def relaxed(self):
+        """///Summary: Names of the toggles that had to be switched on."""
+        return sorted(self._previous)
+
+    def __enter__(self):
+        try:
+            self._options = SelectionUIOptions.GetSelectionUIOptions()
+        except Exception as ex:
+            logger.debug("could not read the selection options: %s", ex)
+            return self
+        for name in self.TOGGLES:
+            try:
+                if not getattr(self._options, name):
+                    setattr(self._options, name, True)
+                    self._previous[name] = False
+            except Exception as ex:
+                logger.debug("could not set %s: %s", name, ex)
+        if self._previous:
+            logger.debug("relaxed selection toggles: %s", self.relaxed)
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback_obj):
+        for name, previous in self._previous.items():
+            try:
+                setattr(self._options, name, previous)
+            except Exception as ex:
+                logger.debug("could not restore %s: %s", name, ex)
+        return False
+
+
+def has_loaded_links(host_doc):
+    """///Summary: True when at least one Revit link is loaded in the document."""
+    for instance in (DB.FilteredElementCollector(host_doc)
+                     .OfClass(DB.RevitLinkInstance)
+                     .WhereElementIsNotElementType()):
+        try:
+            if instance.GetLinkDocument() is not None:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _reference_axis(element, reference, transform):
+    """///Summary: Horizontal direction of the exact edge or face that was clicked.
+
+    Two shapes come back from a pick, and both are useful:
+
+      Edge  — its curve direction is the axis, so a section runs along the edge.
+      Face  — clicking a wall's cut line in a plan gives REFERENCE_TYPE_CUT_EDGE,
+              which the API documents as a reference "to a face that was cut".
+              A planar face's normal is perpendicular to the face, so the axis
+              along it is Z x normal.
+
+    Returns None whenever the pick has no usable geometry behind it, or the
+    result is horizontal-free (a vertical edge projects to nothing in plan). The
+    caller then falls back to the element's own axis, which is what the tool did
+    before edges were pickable at all.
+    """
+    try:
+        geometry = element.GetGeometryObjectFromReference(reference)
+    except Exception as ex:
+        logger.debug("no geometry behind the picked reference: %s", ex)
+        return None
+    if geometry is None:
+        return None
+
+    if isinstance(geometry, DB.Edge):
+        try:
+            curve = geometry.AsCurve()
+        except Exception as ex:
+            logger.debug("edge has no curve: %s", ex)
+            return None
+        if not isinstance(curve, DB.Line):
+            return None
+        return _flatten(transform.OfVector(curve.Direction))
+
+    if isinstance(geometry, DB.PlanarFace):
+        normal = _flatten(transform.OfVector(geometry.FaceNormal))
+        if normal is None:
+            # A horizontal face (floor, ceiling) has a vertical normal and so
+            # gives no direction to run a section along.
+            return None
+        return _flatten(DB.XYZ.BasisZ.CrossProduct(normal))
+
+    logger.debug("picked geometry is %s; no axis from it",
+                 type(geometry).__name__)
+    return None
 
 
 def _as_linked(reference):
@@ -475,33 +640,55 @@ def _as_linked(reference):
     element = link_doc.GetElement(reference.LinkedElementId)
     if element is None:
         return None
-    return PickedObject(element, link_instance.GetTotalTransform(),
-                        link_doc.Title)
+
+    transform = link_instance.GetTotalTransform()
+    # The picked reference is expressed in host space; the geometry lives in the
+    # link's document, so the reference has to be rebased before the linked
+    # element will accept it.
+    axis = None
+    try:
+        axis = _reference_axis(element, reference.CreateReferenceInLink(),
+                              transform)
+    except Exception as ex:
+        logger.debug("could not rebase the reference into the link: %s", ex)
+    return PickedObject(element, transform, link_doc.Title, axis)
 
 
-def _pick_inside_link():
-    """///Summary: Second pick, restricted to the contents of links.
+def _pick_inside_link(fallback=False):
+    """///Summary: A pick restricted to the contents of Revit links.
 
-    ObjectType.Element treats a link as one object, so clicking a link selects
-    the whole model. ObjectType.LinkedElement is the only object type that
-    reaches the elements inside one, and it reaches nothing else — hence the
-    two-step pick rather than one.
+    ObjectType.LinkedElement is the only object type that reaches elements
+    inside a link, and it does so in one click without clicking into the link
+    first. What it cannot do is highlight an individual edge, or pick anything
+    in the host model — hence the paired prompts.
+
+    `fallback` means the caller has another pick to offer, so Escape returns
+    None quietly instead of complaining that nothing was picked.
     """
     try:
-        reference = uidoc.Selection.PickObject(
-            ObjectType.LinkedElement,
-            "Now click the element inside that link")
+        with PickingRelaxed() as toggles:
+            reference = uidoc.Selection.PickObject(
+                ObjectType.LinkedElement,
+                "Click an object inside a link" +
+                ("  (Esc to pick in this model instead)" if fallback
+                 else "  (Esc to cancel)"))
+            relaxed = toggles.relaxed
     except OperationCanceledException:
         return None
     picked = _as_linked(reference)
-    if picked is None:
-        raise SectionInputError(
-            "That click did not land on an element inside a link.\n\nRun it "
-            "again and click directly on a modelled object in the link.")
-    return picked
+    if picked is not None:
+        picked.relaxed_toggles = relaxed
+        return picked
+    if fallback:
+        # The click resolved to nothing usable, but the caller has an edge pick
+        # to offer next, so say nothing and let it try.
+        return None
+    raise SectionInputError(
+        "That click did not land on an element inside a link.\n\nRun it "
+        "again and click directly on a modelled object in the link.")
 
 
-def pick_element():
+def pick_element(links_first):
     """///Summary: The object to section, from the host model or a link.
 
     Returns None if the user presses Escape.
@@ -521,27 +708,52 @@ def pick_element():
                          joolslib.eid_int(element.Id))
             return PickedObject(element, DB.Transform.Identity)
 
+    # Two object types, and neither covers both models. ObjectType.Edge is the
+    # only one that highlights individual edges, but it does not reach into
+    # links at all; ObjectType.LinkedElement reaches into links in a single
+    # click, but highlights whole elements and nothing in the host. So one is
+    # led with and Escape switches to the other, both ways round.
+    if links_first and has_loaded_links(doc):
+        picked = _pick_inside_link(fallback=True)
+        if picked is not None:
+            return picked
+
+    prompt = "Click an edge of the object to section"
+    if has_loaded_links(doc) and not links_first:
+        prompt += "  (Esc to pick inside a link instead)"
+    elif has_loaded_links(doc):
+        prompt += "  (Esc to cancel)"
+
+    relaxed = []
     try:
-        reference = uidoc.Selection.PickObject(
-            ObjectType.Element,
-            "Select the object to section, or click a link to pick inside it")
+        with PickingRelaxed() as toggles:
+            reference = uidoc.Selection.PickObject(
+                ObjectType.Edge, AnyGeometryFilter(), prompt)
+            relaxed = toggles.relaxed
     except OperationCanceledException:
+        if has_loaded_links(doc) and not links_first:
+            return _pick_inside_link()
         return None
 
-    # Some picks on link geometry already carry the element inside it; those
-    # need no second click.
     picked = _as_linked(reference)
     if picked is not None:
+        picked.relaxed_toggles = relaxed
         return picked
 
     element = doc.GetElement(reference.ElementId)
     if isinstance(element, DB.RevitLinkInstance):
+        # The edge pick landed on a link but did not carry the element inside
+        # it. Fall back to the two-step pick rather than sectioning the whole
+        # linked model.
         return _pick_inside_link()
     if element is None:
         raise SectionInputError(
             "That pick did not resolve to an element.\n\nRun it again and click "
-            "directly on a modelled object.")
-    return PickedObject(element, DB.Transform.Identity)
+            "directly on an edge of a modelled object.")
+
+    transform = DB.Transform.Identity
+    return PickedObject(element, transform, None,
+                        _reference_axis(element, reference, transform))
 
 
 def pick_side(picked):
@@ -591,7 +803,7 @@ def main():
         require_plan_view(view)
         view_type = resolve_view_type(doc, settings["view_type_name"])
 
-        picked = pick_element()
+        picked = pick_element(settings["links_first"])
         if picked is None:
             return
         click = pick_side(picked)
@@ -657,6 +869,13 @@ def _report(section, source_view, picked, view_type, measured, notes):
         _feet_inches(measured["depth"])))
     output.print_md("- Top at {}, bottom at {}.".format(
         _feet_inches(measured["top"]), _feet_inches(measured["bottom"])))
+    if picked.relaxed_toggles:
+        output.print_md(
+            "- **Note:** these selection toggles were off and block clicking "
+            "anything inside a link: **{}**. They were switched on for the "
+            "pick and put back afterwards. Leaving them on (status bar, "
+            "bottom right) avoids the round trip."
+            .format(", ".join(picked.relaxed_toggles)))
     for note in notes:
         output.print_md("- **Note:** {}".format(note))
 

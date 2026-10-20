@@ -53,6 +53,12 @@ XAML = """
             <TextBlock Text="inches" VerticalAlignment="Center" Margin="8,0,0,0"/>
         </StackPanel>
 
+        <TextBlock Text="Picking order" FontWeight="Bold" Margin="0,0,0,4"/>
+        <CheckBox x:Name="LinksFirstChk" Margin="0,0,0,6"
+                  Content="Ask for an object inside a link first"/>
+        <TextBlock Text="Revit can highlight individual edges, or reach inside links, but not both in one pick. Whichever is asked for first, Esc switches to the other."
+                   TextWrapping="Wrap" Foreground="#555555" Margin="0,0,0,16"/>
+
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
             <Button x:Name="BtnSave" Content="Save" Width="90" Height="30"
                     Margin="0,0,10,0" IsDefault="True"/>
@@ -108,11 +114,13 @@ class SettingsWindow(object):
     proxy type for a .NET base class.
     """
 
-    def __init__(self, type_names, current_type, offset_inches):
+    def __init__(self, type_names, current_type, offset_inches,
+                 links_first):
         self.window = XamlReader.Parse(XAML)
         self.accepted = False
         self.type_name = current_type
         self.offset_inches = offset_inches
+        self.links_first = links_first
 
         self.type_combo = self.window.FindName("TypeCombo")
         self.offset_box = self.window.FindName("OffsetBox")
@@ -124,6 +132,8 @@ class SettingsWindow(object):
             self.type_combo.SelectedIndex = 0
 
         self.offset_box.Text = "{:g}".format(offset_inches)
+        self.links_chk = self.window.FindName("LinksFirstChk")
+        self.links_chk.IsChecked = bool(links_first)
 
         self._save_handler = _guard(self.on_save)
         self._cancel_handler = _guard(self.on_cancel)
@@ -153,6 +163,7 @@ class SettingsWindow(object):
 
         self.type_name = selected
         self.offset_inches = offset
+        self.links_first = bool(self.links_chk.IsChecked)
         self.accepted = True
         self.window.Close()
 
@@ -181,13 +192,16 @@ def main():
     config = script.get_config()
     saved_type = config.get_option("view_type_name", "")
     saved_offset_ft = float(config.get_option("offset_ft", DEFAULT_OFFSET_FT))
+    saved_links_first = bool(config.get_option("links_first", True))
 
-    dialog = SettingsWindow(type_names, saved_type, saved_offset_ft * 12.0)
+    dialog = SettingsWindow(type_names, saved_type, saved_offset_ft * 12.0,
+                            saved_links_first)
     if not dialog.show():
         return
 
     config.view_type_name = dialog.type_name
     config.offset_ft = dialog.offset_inches / 12.0
+    config.links_first = dialog.links_first
     script.save_config()
 
     TaskDialog.Show(

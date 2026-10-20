@@ -288,8 +288,13 @@ def setup_coordination_view(temp_doc, view_name):
     views = DB.FilteredElementCollector(temp_doc).OfClass(DB.View).ToElements()
     view = next((v for v in views if v.Name == view_name and not v.IsTemplate), None)
 
-    with DB.Transaction(temp_doc, "Setup PDI Coordination View") as t:
-        t.Start()
+    # DB.Transaction is a .NET IDisposable, not a Python context manager. IronPython
+    # mapped IDisposable onto `with`; pythonnet (CPython 3) does not, so `with` raises
+    # "'Transaction' object does not support the context manager protocol". Start and
+    # commit explicitly, with a finally that rolls back if the body throws.
+    t = DB.Transaction(temp_doc, "Setup PDI Coordination View")
+    t.Start()
+    try:
         if not view:
             view = DB.View3D.CreateIsometric(temp_doc, vft.Id)
             view.Name = view_name
@@ -357,6 +362,11 @@ def setup_coordination_view(temp_doc, view_name):
                 logger.warning("Failed to configure workset visibilities: {}".format(ex))
 
         t.Commit()
+    finally:
+        # Leaving a transaction open would block every later transaction on temp_doc.
+        if not t.HasEnded():
+            t.RollBack()
+
     return view
 
 def export_nwc_file(temp_doc, view, folder_path, file_name, nwc_options):

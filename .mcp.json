@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "jools-revit": {
+      "command": "C:\\Users\\rjohnston\\Documents\\_04_GitHub\\Jools-pyRevit-Extension\\mcp_server\\.venv\\Scripts\\python.exe",
+      "args": [
+        "C:\\Users\\rjohnston\\Documents\\_04_GitHub\\Jools-pyRevit-Extension\\mcp_server\\jools_revit_mcp.py"
+      ]
+    }
+  }
+}

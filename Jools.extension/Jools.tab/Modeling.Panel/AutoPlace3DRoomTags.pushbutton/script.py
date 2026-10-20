@@ -859,15 +859,16 @@ def _report(options, by_level, groups, skipped, removed):
         output.print_md("- Skipped **{}** unenclosed room(s), area = 0."
                         .format(len(skipped)))
 
+    # print_table would render headers and no rows here: it passes the data to
+    # a .NET method and pythonnet cannot convert a list of lists (joolslib).
     if groups:
-        output.print_table(
-            table_data=[[level, count, name] for level, count, name in groups],
-            columns=["Level", "Tags", "Group"])
+        output.print_md(joolslib.markdown_table(
+            [[level, count, name] for level, count, name in groups],
+            ["Level", "Tags", "Group"]))
     else:
-        output.print_table(
-            table_data=[[level, len(ids)]
-                        for level, ids in sorted(by_level.items())],
-            columns=["Level", "Tags"])
+        output.print_md(joolslib.markdown_table(
+            [[level, len(ids)] for level, ids in sorted(by_level.items())],
+            ["Level", "Tags"]))
 
 
 if __name__ == "__main__":

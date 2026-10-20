@@ -1,0 +1,2 @@
+title: "Probe Link Dims"
+tooltip: "TEMPORARY diagnostic. Select dimensions you drew by hand to grids and fixtures (host or linked). Rebuilds each one three ways and reports which reference method Revit accepts. Changes nothing in the model. Delete this button once the answer is known."

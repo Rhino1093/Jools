@@ -18,6 +18,7 @@ Warnings alone do not fail the run.
 
 import argparse
 import ast
+import glob
 import io
 import json
 import os
@@ -170,6 +171,165 @@ def check_shebang(path, text, findings):
         )
     )
     return "ironpython"
+
+
+def libs_reached_from_startup(root):
+    """Names of lib/ modules a startup script imports, directly or one hop on.
+
+    Anything startup.py pulls in is executed by IronPython 2.7 too, so the
+    Python-2 constraint is contagious. Without this, an f-string in a lib module
+    passes validation (lib/ is treated as CPython) and then takes the Routes API
+    down at load time with a traceback that points at the wrong file.
+    """
+    reached = set()
+
+    # --root defaults to the extension directory itself but may be given as the
+    # repo root, so look for startup.py at both depths.
+    startups = (glob.glob(os.path.join(root, "startup.py"))
+                + glob.glob(os.path.join(root, "*", "startup.py")))
+
+    for startup in startups:
+        lib_dir = os.path.join(os.path.dirname(startup), "lib")
+        if not os.path.isdir(lib_dir):
+            continue
+        pending = [startup]
+        # One queue, seeded with the startup script; each lib module found gets
+        # walked in turn, so a lib that imports another lib is covered.
+        while pending:
+            current = pending.pop()
+            try:
+                tree = ast.parse(read_text(current))
+            except (SyntaxError, OSError):
+                continue
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    names = [alias.name for alias in node.names]
+                elif isinstance(node, ast.ImportFrom):
+                    names = [node.module] if node.module else []
+                else:
+                    continue
+                for name in names:
+                    top = name.split(".")[0]
+                    # Absolute, so the caller can match against os.path.abspath
+                    # regardless of whether root was given as a relative path.
+                    candidate = os.path.abspath(
+                        os.path.join(lib_dir, top + ".py"))
+                    if os.path.isfile(candidate) and candidate not in reached:
+                        reached.add(candidate)
+                        pending.append(candidate)
+
+    return reached
+
+
+def check_encoding_declaration(path, text, source_path, findings):
+    """Non-ASCII source needs a PEP 263 line to load on IronPython 2.7.
+
+    CPython 3 assumes UTF-8, so a file full of em dashes imports cleanly there
+    and the omission is invisible until IronPython touches it -- at which point
+    the whole Routes API fails to register with a SyntaxError naming a comment.
+    Applied to the files startup.py drags onto IronPython.
+
+    A UTF-8 BOM counts as a declaration, so the raw bytes are checked rather
+    than the already-decoded text.
+    """
+    if all(ord(ch) < 128 for ch in text):
+        return
+
+    try:
+        with io.open(source_path, "rb") as handle:
+            if handle.read(3) == b"\xef\xbb\xbf":
+                return
+    except OSError:
+        pass
+
+    # PEP 263: the declaration must sit on line 1 or line 2.
+    for line in text.split("\n", 2)[:2]:
+        if re.match(r"^[ \t\f]*#.*?coding[:=][ \t]*[-_.a-zA-Z0-9]+", line):
+            return
+
+    offender = next(
+        (i + 1 for i, line in enumerate(text.split("\n"))
+         if any(ord(ch) > 127 for ch in line)),
+        1,
+    )
+    findings.append(
+        Finding(
+            ERROR,
+            path,
+            offender,
+            "encoding-undeclared",
+            "Contains non-ASCII characters but declares no source encoding. "
+            "IronPython 2.7 refuses to parse the file (PEP 263), and pyRevit "
+            "runs startup scripts on IronPython -- so this takes down the whole "
+            "Routes API, with a SyntaxError pointing at a comment.",
+            fix="Add as line 1: # -*- coding: utf-8 -*-",
+        )
+    )
+
+
+def check_py2_compat(path, text, findings):
+    """Flag Python-3-only syntax in a file that has to run on IronPython 2.7.
+
+    ``check_syntax`` cannot do this job: it parses with the running CPython 3,
+    where an f-string is perfectly valid, so the construct that CLAUDE.md calls
+    the single most expensive failure mode in this repo sails straight through.
+    Only an AST walk catches it, and only a walk avoids the false positives a
+    regex would hit on the letter ``f`` before a quote.
+
+    Applied to startup.py, which pyRevit always runs on IronPython 2.7.
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return  # check_syntax already reported this
+
+    # Node type -> what to call it in the message. Limited to constructs that
+    # actually appear by accident when writing modern Python out of habit.
+    py3_only = {
+        "JoinedStr": "an f-string",
+        "FormattedValue": "an f-string",
+        "AnnAssign": "a variable annotation",
+        "Nonlocal": "a nonlocal statement",
+        "AsyncFunctionDef": "an async def",
+        "Await": "an await expression",
+    }
+
+    seen = set()
+    for node in ast.walk(tree):
+        name = type(node).__name__
+        label = py3_only.get(name)
+
+        # Annotations hang off the function rather than being their own node.
+        if label is None and name in ("FunctionDef", "AsyncFunctionDef"):
+            annotated = node.returns is not None or any(
+                arg.annotation is not None
+                for arg in list(node.args.args) + list(node.args.kwonlyargs)
+            )
+            if annotated:
+                label = "a function annotation"
+
+        if label is None:
+            continue
+
+        line = getattr(node, "lineno", 0)
+        if (line, label) in seen:
+            continue
+        seen.add((line, label))
+
+        findings.append(
+            Finding(
+                ERROR,
+                path,
+                line,
+                "py3-only-syntax",
+                "Uses {}, which is a SyntaxError on IronPython 2.7. pyRevit runs "
+                "startup scripts on IronPython unconditionally "
+                "(loader/sessionmgr.py hard-codes create_ipyengine_configs), so "
+                "this file never sees CPython.".format(label),
+                fix='Use "{}".format(...) and drop annotations; keep this file on '
+                    "the Python 2/3 common subset.",
+            )
+        )
 
 
 def check_syntax(path, text, engine, findings):
@@ -523,6 +683,9 @@ def check_bundles(root, findings):
 def run(root):
     """Run every check and return the findings sorted worst-first."""
     findings = []
+    # Resolved once: lib modules that startup.py drags onto IronPython with it.
+    ironpython_libs = libs_reached_from_startup(root)
+
     for path in iter_scripts(root):
         rel = os.path.relpath(path, root)
         text = read_text(path)
@@ -542,13 +705,32 @@ def run(root):
         # this repo's callers are CPython 3.
         is_library = ("lib" + os.sep) in rel or rel.startswith("lib" + os.sep)
 
+        # An extension startup script is the one file pyRevit does not let you
+        # choose an engine for. loader/sessionmgr.py's
+        # execute_extension_startup_script() hard-codes
+        # runtime.create_ipyengine_configs(), and that is the only engine-config
+        # factory in pyrevit/runtime/__init__.py -- so startup.py always runs on
+        # IronPython 2.7 and a shebang there is read as a comment. Requiring one
+        # would be wrong, which makes this the single standing exception to
+        # CLAUDE.md section 2.1.
+        is_startup = os.path.basename(rel) == "startup.py"
+
         if is_library:
             engine = "cpython"
+        elif is_startup:
+            engine = "ironpython"
         else:
             engine = check_shebang(rel, text, findings)
             check_events_shim(rel, text, engine, findings)
 
-        check_syntax(rel, text, engine, findings)
+        # startup.py runs on IronPython but must stay on the Python 2/3 common
+        # subset. check_syntax parses it (a plain SyntaxError is worth catching
+        # either way); check_py2_compat is what actually stops an f-string,
+        # since CPython 3 parses those happily.
+        check_syntax(rel, text, "cpython" if is_startup else engine, findings)
+        if is_startup or os.path.abspath(path) in ironpython_libs:
+            check_py2_compat(rel, text, findings)
+            check_encoding_declaration(rel, text, path, findings)
         check_forms(rel, text, engine, findings)
         check_dotnet_collections(rel, text, engine, findings)
         check_lib_import(rel, text, root, findings)

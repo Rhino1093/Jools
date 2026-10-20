@@ -159,10 +159,17 @@ def main():
             temp_doc = app.OpenDocumentFile(m_path, options)
             if temp_doc:
                 if not temp_doc.IsWorkshared:
-                    with DB.Transaction(temp_doc, "Enable Worksharing") as t:
-                        t.Start()
+                    # DB.Transaction is a .NET IDisposable, not a Python context manager
+                    # -- `with` raises under pythonnet (CPython 3), the only engine here.
+                    t = DB.Transaction(temp_doc, "Enable Worksharing")
+                    t.Start()
+                    try:
                         temp_doc.EnableWorksharing("Shared Levels and Grids", "Workset1")
                         t.Commit()
+                    finally:
+                        # An open transaction would block the cloud save below.
+                        if not t.HasEnded():
+                            t.RollBack()
                 
                 # Upload to ACC
                 temp_doc.SaveAsCloudModel(account_guid, project_guid, folder_id, file_name)
@@ -227,10 +234,17 @@ def main():
                 cloud_path = DB.ModelPathUtils.ConvertCloudGUIDsToCloudPath(p_guid, m_guid)
                 
                 # Relink in a Transaction
-                with DB.Transaction(doc, f"Relink {lt_name} to ACC") as t:
-                    t.Start()
+                # DB.Transaction is a .NET IDisposable, not a Python context manager
+                # -- `with` raises under pythonnet (CPython 3), the only engine here.
+                t = DB.Transaction(doc, f"Relink {lt_name} to ACC")
+                t.Start()
+                try:
                     lt.LoadFrom(cloud_path, DB.WorksetConfiguration())
                     t.Commit()
+                finally:
+                    # An open transaction would block every later relink.
+                    if not t.HasEnded():
+                        t.RollBack()
                 
                 output.print_md(f"- ✅ Relinked: **{lt_name}** to Cloud")
                 relink_count += 1

@@ -146,12 +146,21 @@ def main():
                         
                         # Relink in a Transaction
                         try:
-                            with DB.Transaction(doc, f"Relink {link_name} to Cloud") as t:
-                                t.Start()
+                            # DB.Transaction is a .NET IDisposable, not a Python context
+                            # manager -- `with` raises under pythonnet (CPython 3), which
+                            # is the only engine this extension runs on.
+                            t = DB.Transaction(doc, f"Relink {link_name} to Cloud")
+                            t.Start()
+                            try:
                                 ws_config = DB.WorksetConfiguration()
                                 link_type.LoadFrom(cloud_path, ws_config)
                                 t.Commit()
-                            
+                            finally:
+                                # An open transaction would block every later relink.
+                                if not t.HasEnded():
+                                    t.RollBack()
+
+
                             logger.info("  Relinked successfully.")
                             results.append(f"{link_name}: Success")
                         except Exception as e_relink:

@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+# Declared for IronPython 2.7: pyRevit runs extension startup scripts on
+# that engine, startup.py imports this module, and IronPython refuses a
+# source file containing non-ASCII bytes without this line (PEP 263).
+# CPython 3 assumes UTF-8 and does not need it.
 """Shared helpers for Jools pyRevit tools.
 
 pyRevit puts `<extension>/lib` on sys.path automatically
@@ -139,6 +144,31 @@ def ask_for_string(prompt, default="", title="Input"):
     if form.ShowDialog() != DialogResult.OK:
         return None
     return textbox.Text
+
+
+def markdown_table(rows, columns):
+    """///Summary: A markdown table string, for output.print_md.
+
+    Use this instead of output.print_table under CPython. print_table hands its
+    arguments straight to a .NET method: `columns` is a flat list of strings and
+    converts, but `table_data` is a list *of lists* and pythonnet will not
+    convert that to IEnumerable<IEnumerable<...>>. It raises nothing — the table
+    renders with its headers and no rows at all, which is easy to miss.
+
+        output.print_md(joolslib.markdown_table(rows, ["Level", "Tags"]))
+
+    Every cell is str()'d, and pipes are escaped so a value cannot break the
+    table apart.
+    """
+    def cell(value):
+        return str(value).replace("|", "\\|")
+
+    header = "| " + " | ".join(cell(c) for c in columns) + " |"
+    rule = "| " + " | ".join("---" for _ in columns) + " |"
+    lines = [header, rule]
+    for row in rows:
+        lines.append("| " + " | ".join(cell(v) for v in row) + " |")
+    return "\n".join(lines)
 
 
 class OutputProgress(object):

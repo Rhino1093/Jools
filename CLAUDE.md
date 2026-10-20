@@ -411,8 +411,16 @@ logger.debug("count=%s, curve_len=%s", count, curve.Length)
 - To inspect without leaving geometry behind: run inside a `TransactionGroup`
   and `RollBack()`.
 
-Reloading after an edit: pyRevit **Reload** button, or Ctrl+Click a button to run
-the latest source without a full reload.
+Reloading after an edit: Ctrl+Click a button to run the latest source without a
+full reload.
+
+**Do not use pyRevit Reload while Routes is enabled (pyRevit 6.5.4).** Reload
+shuts down the Routes server thread; the thread's error is printed from a
+background thread, pyRevit builds its output window there, and Revit is killed
+("The calling thread must be STA"), or Revit hangs. Seen 2026-09-18 and
+2026-10-17. Save, then restart Revit instead, which is also the only way changes
+to `startup.py` or `lib/` reach the Routes API. Fixed upstream in pyRevit 7.0.0
+(#3620, #3691), though even there route changes need a restart (#3753).
 
 ---
 

@@ -1,0 +1,2 @@
+title: "Probe Link Picking"
+tooltip: "TEMPORARY diagnostic. Asks Revit to let you click a linked object five different ways and reports what each returns. Changes nothing in the model. Delete this button once the answer is known."

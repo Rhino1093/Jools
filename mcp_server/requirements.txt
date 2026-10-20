@@ -1,0 +1,3 @@
+# MCP server for the Jools Routes API. Written against the 2.x API
+# (MCPServer, ToolError); 1.x used FastMCP and will not import this file.
+mcp>=2.3,<3
