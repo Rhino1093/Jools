@@ -1,0 +1,3 @@
+title: "Element\nInspector"
+tooltip: "Shows who owns, created, and last changed the selected elements,\nwhat is hiding or overriding them in the active view (and which setting wins),\nplus every instance and type parameter.\nSelect elements first, or click the button and pick one."
+author: "Tommy Mai"

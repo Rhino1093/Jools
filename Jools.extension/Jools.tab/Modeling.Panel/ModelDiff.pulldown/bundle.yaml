@@ -1,0 +1,5 @@
+title: "Model Diff"
+tooltip: "Color the changes from an ACC Model Diff CSV in both the central and the up-to-date model, and tag them with 'Source Element ID'. Set Source ID fixes one element's tag by hand."
+layout:
+  - ModelDiff
+  - SetSourceId
