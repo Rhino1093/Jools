@@ -1,0 +1,2 @@
+title: "Model Diff"
+tooltip: "Open both the central and the up-to-date model, then pick the ACC Model Diff CSV. Each model gets a new 3D view of the changes: added (blue), modified (yellow), removed (red, central only). Changed elements are tagged with 'Source Element ID', so copies you paste into the central model keep their tag. Nothing is pasted or deleted for you."

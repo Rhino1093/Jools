@@ -1,0 +1,2 @@
+title: "Set Source ID"
+tooltip: "Select one element pasted in from the up-to-date model, then click. Type the ID of its original in the up-to-date model (find it there with Manage > IDs of Selection). It is saved in the element's 'Source Element ID' parameter, which Model Diff looks up first. Leave the box empty to clear it."
