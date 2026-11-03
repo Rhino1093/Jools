@@ -1,0 +1,2 @@
+title: "View Template\nTransfer"
+tooltip: "Move view templates between projects through a .json file - including into an OLDER Revit (e.g. 2025 into 2022), which Revit can't do on its own.\nClick, choose Export in the project you're copying from, then click again and choose Import in the project you're copying to.\nCarries template settings, category visibility/overrides, filters with their rules, and the line and fill patterns they use. Anything the target Revit doesn't have is skipped and listed at the end."
