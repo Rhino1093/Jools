@@ -1,5 +1,5 @@
 title: "Bulk RVT\n Upgrade"
-tooltip: "Runs Dynamo Script to upgrade multiple Revit models.
-          \nYou will be prompted to locate the file directory
-          \nand then select options relating to the models."
-help_url: "mailto:vdc@erdman.com"
+tooltip: "Upgrades a folder of Revit models to this Revit version, overwriting them in place.
+          \nPick a folder, tick the .rvt files to upgrade, then click Upgrade.
+          \nDialogs and warnings are dismissed automatically so the batch runs unattended."
+help_url: "https://github.com/Rhino1093/Jools"

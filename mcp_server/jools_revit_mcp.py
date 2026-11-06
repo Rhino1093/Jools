@@ -14,8 +14,9 @@ ordinary exception raised in a tool reaches the client as a bare failure with
 its text withheld, so every message meant for the user is raised as ToolError.
 
 Environment:
-    JOOLS_ROUTES_URL   base URL of the Routes API
-                       (default http://127.0.0.1:48884/jools)
+    JOOLS_ROUTES_URL   base URL of the Routes API, e.g. http://127.0.0.1:48884/jools.
+                       Unset (the normal case): the port is found by scanning,
+                       see _discover_base_url.
 """
 
 import json
@@ -30,7 +31,17 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import ToolAnnotations
 
 
-BASE_URL = os.environ.get("JOOLS_ROUTES_URL", "http://127.0.0.1:48884/jools").rstrip("/")
+FIXED_BASE_URL = os.environ.get("JOOLS_ROUTES_URL", "").rstrip("/") or None
+
+# pyRevit 7 starts at the configured port (48884) and counts up past any port a
+# registered server still holds (routes/server/serverinfo.py
+# _get_next_available_port), so a stale registration after a Reload, or a
+# second Revit, moves it. Observed on 48885.
+ROUTES_HOST = "127.0.0.1"
+PORT_FIRST = 48884
+PORT_COUNT = 10
+
+_base_url = FIXED_BASE_URL
 
 # Generous, because pyRevit only runs the request when Revit is idle. A
 # request that times out may still run later, which is why the timeout message
@@ -85,13 +96,60 @@ Revit routes only what lines up as it sits: no pathfinding, no clash avoidance.
 server = MCPServer(name="jools-revit", instructions=INSTRUCTIONS)
 
 
-def _call(method, path, query=None, body=None):
+def _discover_base_url():
+    """///Summary: The Routes base URL of the first port with a listener, or None.
+
+    A bare TCP connect rather than a /ping/ request: ping waits for Revit to be
+    idle, so a busy Revit would look absent. Only localhost is scanned.
+    """
+    for port in range(PORT_FIRST, PORT_FIRST + PORT_COUNT):
+        try:
+            with socket.create_connection((ROUTES_HOST, port), timeout=0.5):
+                return "http://{}:{}/jools".format(ROUTES_HOST, port)
+        except OSError:
+            continue
+    return None
+
+
+def _call(method, path, query=None, body=None, _retried=False):
     """///Summary: One request to the Routes API, as parsed JSON.
 
-    Turns every failure into a ToolError carrying what went wrong and what to
-    do about it, so the message survives the MCP SDK and reaches the user.
+    Finds the port on first use and again whenever the connection is refused.
+    A refused connection means nothing was sent, so retrying once is safe even
+    for a request that writes.
     """
-    url = BASE_URL + path
+    global _base_url
+    if _base_url is None:
+        _base_url = _discover_base_url()
+        if _base_url is None:
+            raise ToolError(
+                "Revit is not answering on ports {}-{}. Open Revit with a project, "
+                "and check that pyRevit Routes is enabled (pyRevit Settings > "
+                "Routes) and that pyRevit loaded the Jools extension.".format(
+                    PORT_FIRST, PORT_FIRST + PORT_COUNT - 1))
+    try:
+        return _send(_base_url, method, path, query, body)
+    except ConnectionRefusedError:
+        if FIXED_BASE_URL:
+            raise ToolError(
+                "Revit is not answering at {} (set by JOOLS_ROUTES_URL). Unset it "
+                "to let the port be found automatically.".format(FIXED_BASE_URL))
+        _base_url = None
+        if _retried:
+            raise ToolError(
+                "Revit stopped answering mid-request. Check Revit is still open "
+                "and retry.")
+        # The server moved, usually after a pyRevit Reload.
+        return _call(method, path, query, body, _retried=True)
+
+
+def _send(base_url, method, path, query, body):
+    """///Summary: Send one request to base_url; ConnectionRefusedError passes through.
+
+    Turns every other failure into a ToolError carrying what went wrong and what
+    to do about it, so the message survives the MCP SDK and reaches the user.
+    """
+    url = base_url + path
     if query:
         cleaned = {k: v for k, v in query.items() if v is not None}
         if cleaned:
@@ -116,11 +174,13 @@ def _call(method, path, query=None, body=None):
             "Revit is free, so check the view before retrying anything that "
             "creates or deletes.".format(TIMEOUT_SECONDS)) from error
     except urllib.error.URLError as error:
+        if isinstance(error.reason, ConnectionRefusedError):
+            raise error.reason
         raise ToolError(
             "Revit is not answering at {}. Open Revit with a project, and check "
             "that pyRevit Routes is enabled (pyRevit Settings > Routes) and that "
             "pyRevit loaded the Jools extension. Detail: {}".format(
-                BASE_URL, error.reason)) from error
+                base_url, error.reason)) from error
 
 
 def _compact(data):
@@ -283,6 +343,34 @@ def fab_route(from_key: str, to_key: str, dry_run: bool = True) -> str:
         "from_key": from_key,
         "to_key": to_key,
         "dry_run": dry_run,
+    }))
+
+
+@server.tool(annotations=READ_ONLY, structured_output=False)
+def section_inspect(section_id: int | None = None,
+                    element_id: int | None = None,
+                    link_id: int | None = None,
+                    plan_view_id: int | None = None,
+                    category: str | None = None) -> str:
+    """Measure a section view against the element it was cut from. Returns the
+    section's frame and crop box (local and world), all its parameters, the
+    element's world box/location/connectors, `margins` (how far the crop extends
+    past the element left/right/below/above/depth, in the section's frame), the
+    plan's view range, and every level. All lengths in feet. Read-only.
+    section_id: omit for the newest section in the model.
+    element_id: omit to use the single selected element.
+    link_id: the RevitLinkInstance id when the element is inside a link.
+    plan_view_id: the plan the section was made from; omit to use the active
+      view if it is a plan.
+    category: with nothing selected the element is searched for (Revit 2022
+      cannot report a selected linked element); this exact category name, e.g.
+      "Pipes", narrows the search. Check `candidates` before trusting margins."""
+    return _compact(_call("GET", "/section/inspect/", query={
+        "section_id": section_id,
+        "element_id": element_id,
+        "link_id": link_id,
+        "plan_view_id": plan_view_id,
+        "category": category,
     }))
 
 

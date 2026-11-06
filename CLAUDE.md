@@ -14,7 +14,7 @@ Do not guess these. They were read off this machine.
 
 | Thing | Value |
 |---|---|
-| pyRevit | 6.5.4 (`%APPDATA%\pyRevit-Master`) |
+| pyRevit | 7.0.0 (`%APPDATA%\pyRevit-Master`) |
 | CPython engine | 3.12.3 (`bin/cengines/CPY3123`), set via `cpyengine = 3123` |
 | IronPython engines | 2.7.12 (default), 3.4.2 — present, but **no script here uses them** |
 | Revit installed | 2019 – 2026 |
@@ -412,15 +412,9 @@ logger.debug("count=%s, curve_len=%s", count, curve.Length)
   and `RollBack()`.
 
 Reloading after an edit: Ctrl+Click a button to run the latest source without a
-full reload.
-
-**Do not use pyRevit Reload while Routes is enabled (pyRevit 6.5.4).** Reload
-shuts down the Routes server thread; the thread's error is printed from a
-background thread, pyRevit builds its output window there, and Revit is killed
-("The calling thread must be STA"), or Revit hangs. Seen 2026-09-18 and
-2026-10-17. Save, then restart Revit instead, which is also the only way changes
-to `startup.py` or `lib/` reach the Routes API. Fixed upstream in pyRevit 7.0.0
-(#3620, #3691), though even there route changes need a restart (#3753).
+full reload. Changes to `startup.py` or `lib/` need pyRevit > Reload: each
+session load clears the route table (`routes.init()` in
+`loader/sessionmgr.py`) and re-runs `startup.py`, which re-registers every route.
 
 ---
 

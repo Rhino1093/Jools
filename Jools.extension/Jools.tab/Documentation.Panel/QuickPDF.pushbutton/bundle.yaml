@@ -1,0 +1,4 @@
+title: "Quick\nPDF"
+tooltip: "Exports the active view or sheet straight to your Downloads folder as a PDF, skipping Revit's export dialog. Uses the Roughbooks PDF settings: sheet size, 100% zoom, color, vector, high raster quality, hides ref planes, scope boxes, crop boundaries and unreferenced view tags. Named after the view. Overwrites an older copy unless it's open, then adds a timestamp."
+author: "Ryan Johnston"
+help_url: "https://github.com/Rhino1093/Jools"

@@ -29,6 +29,9 @@ restart Revit. That writes `[routes] enabled = true` into
     GET  /jools/fab/info/             fabrication config, services, buttons (?service_id=N)
     GET  /jools/fab/connectors/       open connectors (?selected=1, ?element_ids=1,2, ?domain=piping)
     POST /jools/fab/route/            stretch a run between two connectors; dry_run by default
+    GET  /jools/section/inspect/      newest section's crop box vs. the selected element
+                                      (?section_id, ?element_id, ?link_id, ?plan_view_id,
+                                      ?category to narrow the search when nothing is selected)
 
 Every route answers on 127.0.0.1 only once `host = "127.0.0.1"` is set under
 [routes] in pyRevit_config.ini; the default binds every network interface.
@@ -41,10 +44,24 @@ from Autodesk.Revit import DB  # type: ignore
 # <extension>/lib is placed on sys.path for startup scripts by
 # loader/sessionmgr.py (it inserts ext.library_path before running this file),
 # so these need no path setup.
-from joolslib import eid_int
+import joolslib
 import rcpaudit
 import rcpdims
 import fabroute
+import sectionprobe
+
+# pyRevit Reload re-runs this file in the same engine, where the imports above
+# return the modules cached in sys.modules from the previous load: edits to
+# lib/ would be ignored until Revit restarts. Re-executing them makes Reload
+# enough. joolslib first, since the others import from it.
+try:
+    from importlib import reload as _reload   # CPython 3
+except ImportError:
+    _reload = reload                           # noqa: F821 - IronPython 2.7 builtin
+for _module in (joolslib, rcpaudit, rcpdims, fabroute, sectionprobe):
+    _reload(_module)
+
+from joolslib import eid_int
 
 
 api = routes.API('jools')
@@ -234,5 +251,23 @@ def fab_route(doc, request):
         return fabroute.route_between(
             doc, body.get("from_key"), body.get("to_key"),
             dry_run=_as_bool(body.get("dry_run", True)))
+    except ValueError as user_error:
+        return _fail(str(user_error))
+
+
+@api.route('/section/inspect/', methods=['GET'])
+def section_inspect(doc, uidoc, section_id=None, element_id=None, link_id=None,
+                    plan_view_id=None, category=None):
+    """///Summary: Measure a section's crop box against the element it was cut from.
+
+    Read-only. Defaults to the newest section and the single selected element.
+    A linked element needs link_id plus its element_id inside the link. With
+    nothing selected, the element is searched for; `category` (e.g. "Pipes")
+    narrows that search.
+    """
+    try:
+        return sectionprobe.inspect_section(
+            doc, uidoc, section_id=section_id, element_id=element_id,
+            link_id=link_id, plan_view_id=plan_view_id, category=category)
     except ValueError as user_error:
         return _fail(str(user_error))

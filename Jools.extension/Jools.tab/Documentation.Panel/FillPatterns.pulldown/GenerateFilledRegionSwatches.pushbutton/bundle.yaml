@@ -1,4 +1,4 @@
 title: "Generate Filled Region Swatches"
 tooltip: "This script will make filled regions for every hatch\n
           pattern in the project. Must be in a drafting view."
-help_url: "mailto:vdc@erdman.com"
+help_url: "https://github.com/Rhino1093/Jools"
